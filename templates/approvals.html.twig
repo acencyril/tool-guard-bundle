@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<title>AI actions waiting for a human</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14161b;--muted:#5d6370;--line:#e1e4ea;--ok:#147a4b;--bad:#b42318;--warn:#8a5a00;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}main{max-width:900px;margin:0 auto;padding:24px 16px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 10px}.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 12px}
+.tool{font-weight:700}.why{color:var(--warn);font-weight:600}.meta{color:var(--muted);font-size:13px}
+pre{background:var(--bg);border-radius:8px;padding:10px;overflow:auto;font-size:13px;margin:10px 0}
+.acts{display:flex;gap:8px;flex-wrap:wrap}.acts form{margin:0}button{font:inherit;font-weight:700;padding:9px 16px;border-radius:9px;border:1px solid var(--line);cursor:pointer;background:var(--card);color:var(--fg)}
+button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.no{color:var(--bad);border-color:var(--bad)}
+.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 8px}.approved{color:var(--ok)}.rejected,.failed,.deny{color:var(--bad)}.pending{color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}
+@media (max-width:600px){table,tbody,tr,td{display:block}th{display:none}td{border:0;padding:2px 0}tr{border-bottom:1px solid var(--line);padding:6px 0}}
+</style>
+</head>
+<body><main>
+<h1>AI actions waiting for a human</h1>
+<p class="sub">An AI asked for these. They have not run. Read the arguments: approving runs the action exactly as shown.</p>
+{% for a in pending %}
+<div class="card" id="r-{{ a.id }}">
+<div><span class="tool">{{ a.tool }}</span> <span class="meta">· {{ a.channel }} · asked by {{ a.requestedBy ?? 'anonymous' }} · {{ a.requestedAt|date('Y-m-d H:i') }} · #{{ a.id }}</span></div>
+<div class="why">{{ a.reason }}</div>
+<pre>{{ a.arguments|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>
+<div class="acts">
+<form method="post" action="{{ path('tool_guard_decide', {id: a.id, decision: 'approve'}) }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><button class="ok" type="submit">Approve and run</button></form>
+<form method="post" action="{{ path('tool_guard_decide', {id: a.id, decision: 'reject'}) }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><button class="no" type="submit">Reject</button></form>
+</div>
+</div>
+{% else %}
+<p class="card">Nothing waiting.</p>
+{% endfor %}
+
+{% if decided is not empty %}
+<h2>Decided</h2>
+{% for a in decided %}
+<div class="card" id="r-{{ a.id }}"><span class="tool">{{ a.tool }}</span> <span class="tag {{ a.status }}">{{ a.status }}</span>
+<span class="meta">by {{ a.decidedBy ?? '—' }} · {{ a.decidedAt ? a.decidedAt|date('Y-m-d H:i') : '' }} · asked by {{ a.requestedBy ?? 'anonymous' }} · #{{ a.id }}</span>
+{% if a.result %}<pre>{{ a.result }}</pre>{% endif %}</div>
+{% endfor %}
+{% endif %}
+
+<h2>Journal</h2>
+<table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Outcome</th></tr></thead><tbody>
+{% for e in journal %}
+<tr><td>{{ e.at|date('m-d H:i:s') }}</td><td>{{ e.user ?? e.by ?? '—' }}</td>
+<td>{{ e.tool }}{% if e.event == 'call' %} <span class="meta">({{ e.channel }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}</td>
+<td><span class="{{ e.verdict ?? e.status }}">{{ e.verdict ?? e.status }}</span>{% if e.reason %} — {{ e.reason }}{% endif %}</td></tr>
+{% endfor %}
+</tbody></table>
+</main></body></html>

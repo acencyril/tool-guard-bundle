@@ -1,0 +1,101 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Acencyril\ToolGuardBundle\DependencyInjection;
+
+use Acencyril\ToolGuardBundle\Approval\Approver;
+use Acencyril\ToolGuardBundle\Attribute\Granted;
+use Acencyril\ToolGuardBundle\Attribute\Limit;
+use Acencyril\ToolGuardBundle\Attribute\RateLimit;
+use Acencyril\ToolGuardBundle\Attribute\RequiresApproval;
+use Acencyril\ToolGuardBundle\CurrentUser;
+use Acencyril\ToolGuardBundle\Guard;
+use Acencyril\ToolGuardBundle\Integration\Mcp\GuardedReferenceHandler;
+use Mcp\Capability\Registry\ReferenceHandler;
+use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Reference;
+
+/**
+ * 1. The approver gets a locator of every service whose class carries a guard attribute, keyed
+ *    by class, to run an approved call later.
+ * 2. Each MCP server of symfony/mcp-bundle gets its reference handler wrapped by the guard.
+ */
+final class GuardPass implements CompilerPassInterface
+{
+    private const ATTRIBUTES = [Granted::class, Limit::class, RateLimit::class, RequiresApproval::class];
+
+    public function process(ContainerBuilder $container): void
+    {
+        if (!$container->has(Guard::class)) {
+            return;
+        }
+        $tools = [];
+        foreach ($container->getDefinitions() as $id => $def) {
+            $class = $def->getClass() ?? (class_exists($id) ? $id : null);
+            if (null === $class || $def->isAbstract() || str_starts_with($class, 'Acencyril\\ToolGuardBundle\\')) {
+                continue;
+            }
+            $class = $container->getParameterBag()->resolveValue($class);
+            if (!\is_string($class) || !class_exists($class) || !self::isGuarded($class)) {
+                continue;
+            }
+            $tools[$class] = new Reference($id);
+        }
+        $container->getDefinition(Approver::class)->setArgument('$tools', ServiceLocatorTagPass::register($container, $tools));
+
+        if (!class_exists(ReferenceHandler::class)) {
+            return;
+        }
+        foreach ($container->getDefinitions() as $id => $def) {
+            if (1 !== preg_match('/^mcp\.server\.([^.]+)\.builder$/', $id, $m)) {
+                continue;
+            }
+            $inner = null;
+            $locator = null;
+            $calls = [];
+            foreach ($def->getMethodCalls() as [$method, $args]) {
+                if ('setReferenceHandler' === $method) {
+                    $inner = $args[0];
+                    continue;
+                }
+                if ('setContainer' === $method) {
+                    $locator = $args[0];
+                }
+                $calls[] = [$method, $args];
+            }
+            $inner ??= new Definition(ReferenceHandler::class, null === $locator ? [] : [$locator]);
+            $guarded = 'tool_guard.mcp.'.$m[1].'.reference_handler';
+            $container->register($guarded, GuardedReferenceHandler::class)
+                ->setArguments([$inner, new Reference(Guard::class), new Reference(CurrentUser::class)]);
+            $calls[] = ['setReferenceHandler', [new Reference($guarded)]];
+            $def->setMethodCalls($calls);
+        }
+    }
+
+    private static function isGuarded(string $class): bool
+    {
+        try {
+            $r = new \ReflectionClass($class);
+        } catch (\ReflectionException) {
+            return false;
+        }
+        foreach (self::ATTRIBUTES as $a) {
+            if ([] !== $r->getAttributes($a)) {
+                return true;
+            }
+        }
+        foreach ($r->getMethods(\ReflectionMethod::IS_PUBLIC) as $m) {
+            foreach (self::ATTRIBUTES as $a) {
+                if ([] !== $m->getAttributes($a)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+}

@@ -1,0 +1,38 @@
+{
+    "name": "acencyril/tool-guard-bundle",
+    "description": "A prompt is not a lock: code-level guardrails for the tools AI agents can call in Symfony (Symfony AI agents and MCP servers) — permissions, limits, human approval, audit journal.",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "keywords": ["symfony", "symfony-ai", "mcp", "ai-agent", "guardrails", "security", "human-in-the-loop"],
+    "require": {
+        "php": ">=8.2",
+        "psr/cache": "^2.0 || ^3.0",
+        "psr/log": "^2.0 || ^3.0",
+        "symfony/config": "^7.3 || ^8.0",
+        "symfony/dependency-injection": "^7.3 || ^8.0",
+        "symfony/event-dispatcher": "^7.3 || ^8.0",
+        "symfony/http-kernel": "^7.3 || ^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5",
+        "symfony/ai-agent": "^1.0@beta",
+        "symfony/ai-platform": "^1.0@beta",
+        "mcp/sdk": "^0.9",
+        "symfony/framework-bundle": "^7.4",
+        "symfony/security-bundle": "^7.4",
+        "symfony/twig-bundle": "^7.4",
+        "symfony/cache": "^7.4",
+        "symfony/console": "^7.4"
+    },
+    "suggest": {
+        "symfony/ai-bundle": "Guard the tools of Symfony AI agents",
+        "symfony/mcp-bundle": "Guard the tools of your MCP servers",
+        "symfony/security-bundle": "#[Granted] checks and the approver's identity",
+        "symfony/twig-bundle": "The approvals page"
+    },
+    "autoload": { "psr-4": { "Acencyril\\ToolGuardBundle\\": "src/" } },
+    "autoload-dev": { "psr-4": { "Acencyril\\ToolGuardBundle\\Tests\\": "tests/" } },
+    "minimum-stability": "beta",
+    "prefer-stable": true,
+    "config": { "sort-packages": true }
+}
