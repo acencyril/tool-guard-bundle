@@ -29,6 +29,9 @@ final class NtfyNotifier
 
     public function __invoke(ApprovalRequested $event): void
     {
+        if ('' === trim((string) parse_url($this->topicUrl, \PHP_URL_PATH), '/')) {
+            return; // no topic (an empty environment variable): nobody to tell
+        }
         $a = $event->approval;
         $args = json_encode($a->arguments, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_PARTIAL_OUTPUT_ON_ERROR);
         $headers = [
