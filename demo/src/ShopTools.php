@@ -34,7 +34,7 @@ final class ShopTools
 
     #[McpTool(name: 'refund', description: 'Refund an order, in euros')]
     #[Granted('ORDER_OWNER', subject: 'orderId')]
-    #[Limit('amount', max: 50, above: Limit::APPROVAL)]
+    #[Limit('amount', max: 50, above: Limit::APPROVAL, min: 0.01)]
     #[Limit('amount', max: 1000)]
     #[RateLimit(3, seconds: 3600)]
     public function refund(string $orderId, float $amount): string

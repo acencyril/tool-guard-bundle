@@ -103,14 +103,39 @@ final class GuardPass implements CompilerPassInterface
                 return true;
             }
         }
+        $guarded = false;
         foreach ($r->getMethods(\ReflectionMethod::IS_PUBLIC) as $m) {
             foreach (self::ATTRIBUTES as $a) {
                 if ([] !== $m->getAttributes($a)) {
-                    return true;
+                    $guarded = true;
+                    self::checkArguments($m);
+                    break;
                 }
             }
         }
 
-        return false;
+        return $guarded;
+    }
+
+    /**
+     * A rule naming an argument the method does not have would refuse every call, silently: a
+     * typo fails the build instead ("amout" for "amount").
+     */
+    private static function checkArguments(\ReflectionMethod $m): void
+    {
+        $params = array_map(static fn (\ReflectionParameter $p) => $p->getName(), $m->getParameters());
+        $named = [];
+        foreach ($m->getAttributes(Limit::class) as $a) {
+            $named[] = $a->newInstance()->argument;
+        }
+        foreach ($m->getAttributes(Granted::class) as $a) {
+            $subject = $a->newInstance()->subject;
+            null !== $subject && $named[] = $subject;
+        }
+        foreach ($named as $arg) {
+            if (!\in_array($arg, $params, true)) {
+                throw new \InvalidArgumentException(sprintf('Tool Guard: %s::%s() has a rule on argument "%s", which it does not take (%s).', $m->class, $m->getName(), $arg, implode(', ', $params) ?: 'no arguments'));
+            }
+        }
     }
 }

@@ -27,6 +27,23 @@ final class OrderTools
 }
 ```
 
+And you prove it in CI, like you test your voters — no model, no API key:
+
+```php
+final class RefundRulesTest extends KernelTestCase
+{
+    use ToolGuardAssertions;
+
+    public function testBigRefundsWaitForAHuman(): void
+    {
+        $this->actingAs('alice');
+        $this->assertToolRan('refund', ['orderId' => 'A-1', 'amount' => 20]);
+        $this->assertToolHeld('refund', ['orderId' => 'A-1', 'amount' => 640]);
+        $this->assertToolRefused('refund', ['orderId' => 'B-7', 'amount' => 20], because: 'not granted');
+    }
+}
+```
+
 ## What already exists, and what Tool Guard adds
 
 Three layers answer three different questions. Tool Guard is the last one.
@@ -44,7 +61,7 @@ and the history of calls: it happens where the call runs, not at the door.
 | Attribute | Effect |
 |---|---|
 | `#[Granted(attribute, subject: 'arg')]` | Symfony Security decides, with the tool argument as subject (your voters). On MCP tools too. |
-| `#[Limit('arg', max, above: deny\|approval)]` | A numeric ceiling. Missing or not a number: refused (a limit can't be skipped by leaving the argument out). |
+| `#[Limit('arg', max, above: deny\|approval, min: …)]` | A numeric ceiling (and floor: no refund of -500 €). Missing, not a number or infinite: refused (a limit can't be skipped by leaving the argument out). A rule on an argument the method doesn't take fails the build. |
 | `#[RateLimit(n, seconds, per: user\|tool)]` | Ten refunds of 49 € are not one of 490 € — unless you count them. |
 | `#[RequiresApproval(reason)]` | Every call waits for a human. |
 
@@ -151,6 +168,26 @@ The same tools, with the same attributes, serve both paths: `#[McpTool]` for the
 Then open http://127.0.0.1:8000/admin/ai/approvals as `boss` / `boss` and approve or reject. With
 `TOOL_GUARD_NTFY_TOPIC=<a long random topic>` in the environment of the server, each held call
 also buzzes the phone subscribed to it in the ntfy app. The tools are in `demo/src/ShopTools.php`.
+
+## Testing your rules
+
+`ToolGuardAssertions` is a trait for your `KernelTestCase` or `WebTestCase` (with
+`framework.test: true`). Each call takes the real path: over your MCP server (HTTP, firewall,
+guard), or through a Symfony AI toolbox with your event dispatcher (`agentTools: $service`). So a
+test also fails when the guard is not wired where you think.
+
+| Method | |
+|---|---|
+| `actingAs('alice')` | the next calls are alice's, loaded from your user providers |
+| `assertToolRan($tool, $args, times: 3)` | ran, three times in a row |
+| `assertToolHeld($tool, $args, because: '…')` | waits for a human; did not run |
+| `assertToolRefused($tool, $args, because: '…')` | a rule refused it; did not run |
+| `assertToolNotRun($tool, $args)` | did not run, whatever stopped it (a rule, or the MCP server's own argument validation) |
+| `resetToolGuard()` | forget approvals, journal and rate counters (in `setUp`) |
+
+Override `mcpPath()` (default `/_mcp`) and `mcpFirewall()` (default `main`) if yours differ.
+`tests/Demo/DemoRulesTest.php` tests the demo shop this way, including the usual tricks: the
+amount left out, text for a number, a negative refund, infinity, someone else's order.
 
 ## Configuration
 

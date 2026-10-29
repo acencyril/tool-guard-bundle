@@ -56,6 +56,10 @@ final class ToolGuardBundle extends AbstractBundle
     /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}} $config */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
+        $container->parameters()
+            ->set('tool_guard.approvals_dir', $config['approvals_dir'])
+            ->set('tool_guard.journal', $config['journal'])
+            ->set('tool_guard.cache', $config['cache']);
         $s = $container->services();
         $s->set(FilesystemApprovalStore::class)->args([$config['approvals_dir']]);
         $s->alias(ApprovalStore::class, FilesystemApprovalStore::class);

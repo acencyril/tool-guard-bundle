@@ -56,8 +56,10 @@ final class Kernel extends BaseKernel
     protected function configureContainer(ContainerConfigurator $c): void
     {
         $c->extension('framework', [
-            'secret' => 'demo-only-secret', 'http_method_override' => false, 'session' => true,
+            'secret' => 'demo-only-secret', 'http_method_override' => false,
             'csrf_protection' => true, 'router' => ['utf8' => true], 'http_client' => true,
+            'test' => 'test' === $this->environment,
+            'session' => 'test' === $this->environment ? ['storage_factory_id' => 'session.storage.factory.mock_file'] : true,
         ]);
         $c->extension('security', [
             'password_hashers' => ['Symfony\Component\Security\Core\User\InMemoryUser' => 'plaintext'],

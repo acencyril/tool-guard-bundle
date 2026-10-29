@@ -93,8 +93,11 @@ final class Guard
         $hold = null;
         foreach ($r['limits'] as $l) {
             $v = $call->arguments[$l->argument] ?? null;
-            if (!is_numeric($v)) {
+            if (!is_numeric($v) || !is_finite((float) $v)) {
                 return Decision::deny(sprintf('"%s" must be a number', $l->argument));
+            }
+            if (null !== $l->min && (float) $v < $l->min) {
+                return Decision::deny(sprintf('%s %s is below the minimum of %s', $l->argument, self::scalar($v), self::scalar($l->min)));
             }
             if ((float) $v > $l->max) {
                 $why = sprintf('%s %s is above the limit of %s', $l->argument, self::scalar($v), self::scalar($l->max));
