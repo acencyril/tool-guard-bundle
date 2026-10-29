@@ -3,7 +3,15 @@
     "description": "A prompt is not a lock: code-level guardrails for the tools AI agents can call in Symfony (Symfony AI agents and MCP servers) — permissions, limits, human approval, audit journal.",
     "type": "symfony-bundle",
     "license": "MIT",
-    "keywords": ["symfony", "symfony-ai", "mcp", "ai-agent", "guardrails", "security", "human-in-the-loop"],
+    "keywords": [
+        "symfony",
+        "symfony-ai",
+        "mcp",
+        "ai-agent",
+        "guardrails",
+        "security",
+        "human-in-the-loop"
+    ],
     "require": {
         "php": ">=8.2",
         "psr/cache": "^2.0 || ^3.0",
@@ -37,9 +45,20 @@
         "symfony/security-bundle": "#[Granted] checks and the approver's identity",
         "symfony/twig-bundle": "The approvals page"
     },
-    "autoload": { "psr-4": { "Acencyril\\ToolGuardBundle\\": "src/" } },
-    "autoload-dev": { "psr-4": { "Acencyril\\ToolGuardBundle\\Tests\\": "tests/" } },
+    "autoload": {
+        "psr-4": {
+            "Acencyril\\ToolGuardBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Acencyril\\ToolGuardBundle\\Tests\\": "tests/",
+            "ToolGuardDemo\\": "demo/src/"
+        }
+    },
     "minimum-stability": "beta",
     "prefer-stable": true,
-    "config": { "sort-packages": true }
+    "config": {
+        "sort-packages": true
+    }
 }
