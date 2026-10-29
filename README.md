@@ -27,6 +27,20 @@ final class OrderTools
 }
 ```
 
+## What already exists, and what Tool Guard adds
+
+Three layers answer three different questions. Tool Guard is the last one.
+
+| Question | Already there | Tool Guard |
+|---|---|---|
+| **Who reaches the MCP server?** | A Symfony firewall on the MCP route; OAuth bearer tokens (the PHP MCP SDK's `AuthorizationMiddleware`) | — (use them) |
+| **Which tools may this client call?** | Per-tool OAuth scopes (the SDK's `ScopePolicy`, not configurable in `symfony/mcp-bundle` yet); `#[IsGrantedTool]` on Symfony AI agent tools | `#[Granted]` with your Symfony voters, on agent tools **and** MCP tools |
+| **This call, with these arguments, now?** | Nothing | `#[Granted(subject: 'orderId')]` (this order is the user's), `#[Limit]` (how much), `#[RateLimit]` (how often), `#[RequiresApproval]` (a human decides, on another channel), a hash-chained journal |
+
+A scope says *"may refund"*. It can't say *"may refund this order, up to 50 €, three times an
+hour, and above that only if the owner taps yes"*. That decision needs the arguments, the user
+and the history of calls: it happens where the call runs, not at the door.
+
 | Attribute | Effect |
 |---|---|
 | `#[Granted(attribute, subject: 'arg')]` | Symfony Security decides, with the tool argument as subject (your voters). On MCP tools too. |
@@ -122,9 +136,10 @@ transport behind a firewall. Over stdio there is no user.
 
 ## Relation to Symfony AI's `#[IsGrantedTool]`
 
-Symfony AI already checks `#[IsGrantedTool]` on agent tools. Tool Guard adds what it does not
-cover: the same permissions on MCP tools, limits, rates, human approval and the journal, with
-one set of attributes for both.
+Symfony AI already checks `#[IsGrantedTool]` on agent tools, and the PHP MCP SDK can require
+OAuth scopes per tool. Tool Guard adds what neither covers: decisions on the arguments of the
+call (voter subject, limits), rates, human approval on another channel and the journal, with one
+set of attributes for agent tools and MCP tools.
 
 ## License
 
