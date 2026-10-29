@@ -1,0 +1,37 @@
+# The demo attack against a real model (OpenRouter), on demand. Needs the repository secret
+# OPENROUTER_API_KEY. The transcript goes to the run summary and to an artifact.
+name: Real model attack
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'OpenRouter model with tool calling'
+        default: 'openai/gpt-4.1-mini'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  attack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer
+      - run: composer install --no-interaction --no-progress
+      - name: Attack
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEMO_MODEL: ${{ inputs.model }}
+        run: |
+          php demo/bin/console demo:attack-real-model --no-ansi | tee transcript.txt
+          { echo '```'; cat transcript.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transcript
+          path: transcript.txt

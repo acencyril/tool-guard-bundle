@@ -26,6 +26,7 @@
         "nyholm/psr7": "^1.8",
         "phpunit/phpunit": "^11.5",
         "symfony/ai-agent": "^1.0@beta",
+        "symfony/ai-open-router-platform": "^1.0@beta",
         "symfony/ai-platform": "^1.0@beta",
         "symfony/browser-kit": "^7.4",
         "symfony/cache": "^7.4",

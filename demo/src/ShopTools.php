@@ -9,8 +9,16 @@ use Acencyril\ToolGuardBundle\Attribute\Limit;
 use Acencyril\ToolGuardBundle\Attribute\RateLimit;
 use Acencyril\ToolGuardBundle\Attribute\RequiresApproval;
 use Mcp\Capability\Attribute\McpTool;
+use Symfony\AI\Agent\Toolbox\Attribute\AsTool;
 
-/** The tools a customer-service AI gets over MCP. The rules are the attributes, not a prompt. */
+/**
+ * The tools a customer-service AI gets, over MCP (demo:attack) and as Symfony AI agent tools
+ * (demo:attack-real-model). The rules are the attributes, not a prompt: the same ones on both sides.
+ */
+#[AsTool('order', 'Show an order', method: 'order')]
+#[AsTool('refund', 'Refund an order, in euros', method: 'refund')]
+#[AsTool('export_customers', 'Every customer with address', method: 'exportCustomers')]
+#[AsTool('send_newsletter', 'Email every customer', method: 'sendNewsletter')]
 final class ShopTools
 {
     public function __construct(private readonly Shop $shop)

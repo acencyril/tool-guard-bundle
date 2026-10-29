@@ -78,6 +78,7 @@ final class Kernel extends BaseKernel
         $s->set(ShopTools::class);
         $s->set(OrderVoter::class);
         $s->set(Command\AttackCommand::class);
+        self::unguarded() || $s->set(Command\RealModelAttackCommand::class);
     }
 
     protected function configureRoutes(RoutingConfigurator $routes): void

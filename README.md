@@ -135,6 +135,19 @@ php demo/bin/console demo:attack --url=http://127.0.0.1:8001
 # 9 attempts: all 9 ran — Bob's order, every customer's address, 5 000 € refunded, the newsletter sent.
 ```
 
+### With a real model
+
+The same attack, as messages to a real model running the shop's support agent (Symfony AI agent,
+any OpenRouter model with tool calling). It is a crash test, not a chatbot: the point is what
+the model gets talked into, and what Tool Guard then lets it do.
+
+```bash
+OPENROUTER_API_KEY=… php demo/bin/console demo:attack-real-model --model=openai/gpt-4.1-mini
+```
+
+The same tools, with the same attributes, serve both paths: `#[McpTool]` for the MCP server,
+`#[AsTool]` for the agent (`demo/src/ShopTools.php`).
+
 Then open http://127.0.0.1:8000/admin/ai/approvals as `boss` / `boss` and approve or reject. With
 `TOOL_GUARD_NTFY_TOPIC=<a long random topic>` in the environment of the server, each held call
 also buzzes the phone subscribed to it in the ntfy app. The tools are in `demo/src/ShopTools.php`.
