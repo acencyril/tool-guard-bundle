@@ -47,9 +47,10 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <h2>Journal</h2>
 <table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Outcome</th></tr></thead><tbody>
 {% for e in journal %}
+{% set outcome = e.verdict ?? e.status ?? '' %}
 <tr><td>{{ e.at|date('m-d H:i:s') }}</td><td>{{ e.user ?? e.by ?? '—' }}</td>
-<td>{{ e.tool }}{% if e.event == 'call' %} <span class="meta">({{ e.channel }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}</td>
-<td><span class="{{ e.verdict ?? e.status }}">{{ e.verdict ?? e.status }}</span>{% if e.reason %} — {{ e.reason }}{% endif %}</td></tr>
+<td>{{ e.tool ?? '' }}{% if (e.event ?? '') == 'call' %} <span class="meta">({{ e.channel ?? '' }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}</td>
+<td><span class="{{ outcome }}">{{ outcome }}</span>{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
 {% endfor %}
 </tbody></table>
 </main></body></html>

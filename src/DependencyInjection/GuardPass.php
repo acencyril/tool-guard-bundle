@@ -35,12 +35,8 @@ final class GuardPass implements CompilerPassInterface
         }
         $tools = [];
         foreach ($container->getDefinitions() as $id => $def) {
-            $class = $def->getClass() ?? (class_exists($id) ? $id : null);
-            if (null === $class || $def->isAbstract() || str_starts_with($class, 'Acencyril\\ToolGuardBundle\\')) {
-                continue;
-            }
-            $class = $container->getParameterBag()->resolveValue($class);
-            if (!\is_string($class) || !class_exists($class) || !self::isGuarded($class)) {
+            $class = $container->getParameterBag()->resolveValue($def->getClass() ?? $id);
+            if (!\is_string($class) || $def->isAbstract() || $def->isSynthetic() || self::skipped($class) || !self::isGuarded($class)) {
                 continue;
             }
             $tools[$class] = new Reference($id);
@@ -76,11 +72,30 @@ final class GuardPass implements CompilerPassInterface
         }
     }
 
+    /** Framework and vendor services carry no tool of the application: not even loaded. */
+    private static function skipped(string $class): bool
+    {
+        if (str_starts_with($class, 'Acencyril\\ToolGuardBundle\\') && !str_contains($class, '\\Tests\\')) {
+            return true;
+        }
+        foreach (['Symfony\\', 'Doctrine\\', 'Twig\\', 'Psr\\', 'Mcp\\', 'Monolog\\'] as $prefix) {
+            if (str_starts_with($class, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static function isGuarded(string $class): bool
     {
         try {
+            // a class whose parent is not installed is not ours to load
+            if (!class_exists($class)) {
+                return false;
+            }
             $r = new \ReflectionClass($class);
-        } catch (\ReflectionException) {
+        } catch (\Throwable) {
             return false;
         }
         foreach (self::ATTRIBUTES as $a) {

@@ -10,7 +10,9 @@ use Acencyril\ToolGuardBundle\Approval\FilesystemApprovalStore;
 use Acencyril\ToolGuardBundle\Command\ApprovalsCommand;
 use Acencyril\ToolGuardBundle\Controller\ApprovalsController;
 use Acencyril\ToolGuardBundle\DependencyInjection\GuardPass;
+use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
 use Acencyril\ToolGuardBundle\Integration\Agent\GuardToolCalls;
+use Acencyril\ToolGuardBundle\Notify\NtfyNotifier;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
 use Symfony\AI\Agent\Toolbox\Event\ToolCallRequested;
@@ -40,11 +42,18 @@ final class ToolGuardBundle extends AbstractBundle
                 ->scalarNode('journal')->defaultValue('%kernel.project_dir%/var/tool_guard/journal.jsonl')->end()
                 ->scalarNode('approver_role')->defaultValue('ROLE_ADMIN')->info('Who may approve or reject on the approvals page')->end()
                 ->scalarNode('cache')->defaultValue('cache.app')->info('PSR-6 pool counting #[RateLimit]')->end()
+                ->arrayNode('ntfy')->info('A push to the approvers\' phones when a call waits (https://ntfy.sh)')->canBeEnabled()
+                    ->children()
+                        ->scalarNode('topic_url')->isRequired()->info('e.g. https://ntfy.sh/a-long-random-topic')->end()
+                        ->scalarNode('approvals_url')->defaultNull()->info('The approvals page, absolute, opened from the notification')->end()
+                        ->scalarNode('token')->defaultNull()->end()
+                    ->end()
+                ->end()
                 ->integerNode('max_pending_per_user')->defaultValue(3)->min(1)->info('Requests one user may have waiting; more are refused')->end()
             ->end();
     }
 
-    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int} $config */
+    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}} $config */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $s = $container->services();
@@ -58,6 +67,11 @@ final class ToolGuardBundle extends AbstractBundle
             service('security.authorization_checker')->nullOnInvalid(), service($config['cache'])->nullOnInvalid(), service('event_dispatcher')->nullOnInvalid(), $config['max_pending_per_user'],
         ]);
         $s->set(Approver::class)->args([service(ApprovalStore::class), service_locator([]), service(Journal::class), service('event_dispatcher')->nullOnInvalid()]);
+        if ($config['ntfy']['enabled']) {
+            $s->set(NtfyNotifier::class)
+                ->args([service('http_client'), $config['ntfy']['topic_url'], $config['ntfy']['approvals_url'], $config['ntfy']['token'], service('logger')->nullOnInvalid()])
+                ->tag('kernel.event_listener', ['event' => ApprovalRequested::class]);
+        }
         if (class_exists(ToolCallRequested::class)) {
             $s->set(GuardToolCalls::class)->args([service(Guard::class), service(CurrentUser::class)])
                 ->tag('kernel.event_listener', ['event' => ToolCallRequested::class, 'priority' => 64]);

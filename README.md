@@ -60,6 +60,18 @@ php bin/console tool-guard:approvals approve 3f9a12c0
 php bin/console tool-guard:approvals verify     # the journal was not edited
 ```
 
+### On your phone
+
+```yaml
+tool_guard:
+    ntfy:
+        topic_url: 'https://ntfy.sh/%env(TOOL_GUARD_NTFY_TOPIC)%'   # a long random topic
+        approvals_url: 'https://shop.example/admin/ai/approvals'
+```
+
+Install the ntfy app, subscribe to the topic: each held call buzzes, with the policy's reason and
+the raw arguments (never text the model wrote), and a button to the approvals page.
+
 ## The journal
 
 Every guarded call (allowed, refused, held) and every human decision, one JSON line each, each
