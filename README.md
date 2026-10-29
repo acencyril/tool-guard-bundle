@@ -89,7 +89,18 @@ the raw arguments (never text the model wrote), and a button to the approvals pa
 ## The journal
 
 Every guarded call (allowed, refused, held) and every human decision, one JSON line each, each
-line chained to the hash of the previous one: an attempt deleted afterwards breaks the chain.
+line chained to the hash of the previous one: an attempt deleted or edited afterwards breaks the
+chain.
+
+A chain alone does not stop someone who rewrites the whole file from scratch: that is a new,
+valid chain. So `verify` prints the head of the chain; keep it somewhere else (an email, a
+ticket, another server), and `verify <head>` later tells whether the journal still holds it.
+
+```bash
+php bin/console tool-guard:approvals verify
+# [OK] The journal chain holds.  Head: 3b1f…  — keep it somewhere else
+php bin/console tool-guard:approvals verify 3b1f…
+```
 
 ## Try it in two minutes
 
@@ -115,6 +126,15 @@ php demo/bin/console demo:attack
 9 attempts in 132 ms: 1 ran, 2 wait for a human, 6 refused — in code, whatever the prompt said.
 ```
 
+Each run starts from the same shop (`--keep` to carry on from the last one). To see what the
+same agent gets when the prompt is the only lock, start the same shop without Tool Guard:
+
+```bash
+DEMO_UNGUARDED=1 php -S 127.0.0.1:8001 -t demo/public &
+php demo/bin/console demo:attack --url=http://127.0.0.1:8001
+# 9 attempts: all 9 ran — Bob's order, every customer's address, 5 000 € refunded, the newsletter sent.
+```
+
 Then open http://127.0.0.1:8000/admin/ai/approvals as `boss` / `boss` and approve or reject. With
 `TOOL_GUARD_NTFY_TOPIC=<a long random topic>` in the environment of the server, each held call
 also buzzes the phone subscribed to it in the ntfy app. The tools are in `demo/src/ShopTools.php`.
@@ -136,8 +156,9 @@ transport behind a firewall. Over stdio there is no user.
 
 ## Relation to Symfony AI's `#[IsGrantedTool]`
 
-Symfony AI already checks `#[IsGrantedTool]` on agent tools, and the PHP MCP SDK can require
-OAuth scopes per tool. Tool Guard adds what neither covers: decisions on the arguments of the
+Symfony AI already checks `#[IsGrantedTool]` on agent tools, the PHP MCP SDK can require OAuth
+scopes per tool, and permissions on MCP tools are being worked on upstream; Tool Guard's
+`#[Granted]` will step aside for them when they land. Tool Guard adds what neither covers: decisions on the arguments of the
 call (voter subject, limits), rates, human approval on another channel and the journal, with one
 set of attributes for agent tools and MCP tools.
 

@@ -27,7 +27,7 @@ final class ApprovalsCommand extends Command
     protected function configure(): void
     {
         $this->addArgument('action', InputArgument::OPTIONAL, 'list | approve | reject | verify', 'list')
-            ->addArgument('id', InputArgument::OPTIONAL, 'The request id');
+            ->addArgument('id', InputArgument::OPTIONAL, 'The request id; for verify, a head noted earlier');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -55,9 +55,20 @@ final class ApprovalsCommand extends Command
                         return Command::SUCCESS;
                     }
                     $broken = $this->journal->verify();
-                    null === $broken ? $io->success('The journal chain holds.') : $io->error(sprintf('The journal was changed: line %d does not follow.', $broken));
+                    if (null !== $broken) {
+                        $io->error(sprintf('The journal was changed: line %d does not follow.', $broken));
 
-                    return null === $broken ? Command::SUCCESS : Command::FAILURE;
+                        return Command::FAILURE;
+                    }
+                    if ('' !== $id && !$this->journal->contains($id)) {
+                        $io->error('The chain holds, but the head you noted is not in it: the journal was rewritten.');
+
+                        return Command::FAILURE;
+                    }
+                    $io->success('The journal chain holds'.('' !== $id ? ', and it still contains the head you noted.' : '.'));
+                    $io->text(sprintf('Head: %s — keep it somewhere else; "verify <head>" later tells whether the file was rewritten from scratch.', $this->journal->head() ?? 'none (empty journal)'));
+
+                    return Command::SUCCESS;
             }
         } catch (\InvalidArgumentException|\LogicException $e) {
             $io->error($e->getMessage());

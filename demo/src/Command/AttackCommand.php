@@ -9,6 +9,9 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -24,14 +27,29 @@ final class AttackCommand extends Command
     private string $url;
     private ?string $session = null;
 
+    public function __construct(
+        #[Autowire('%kernel.project_dir%/var')] private readonly string $var,
+        #[Autowire(service: 'cache.app')] private readonly CacheInterface $cache,
+    ) {
+        parent::__construct();
+    }
+
     protected function configure(): void
     {
         $this->addOption('url', null, InputOption::VALUE_REQUIRED, 'The shop', $_SERVER['DEMO_URL'] ?? 'http://127.0.0.1:8000')
-            ->addOption('as', null, InputOption::VALUE_REQUIRED, 'user:password', 'alice:alice');
+            ->addOption('as', null, InputOption::VALUE_REQUIRED, 'user:password', 'alice:alice')
+            ->addOption('keep', null, InputOption::VALUE_NONE, 'Keep the shop, the approvals and the counters of the previous run');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        if (!$input->getOption('keep')) {
+            // every run starts from the same shop: same orders, nothing waiting, counters at zero
+            (new Filesystem())->remove([$this->var.'/shop.json', $this->var.'/tool_guard']);
+            if (method_exists($this->cache, 'clear')) {
+                $this->cache->clear();
+            }
+        }
         $this->url = rtrim((string) $input->getOption('url'), '/').'/mcp';
         [$user, $pw] = explode(':', (string) $input->getOption('as'), 2) + [1 => ''];
         $this->http = HttpClient::create(['auth_basic' => [$user, $pw], 'headers' => ['Accept' => 'application/json, text/event-stream', 'MCP-Protocol-Version' => '2025-06-18']]);
@@ -67,7 +85,9 @@ final class AttackCommand extends Command
             $output->writeln(sprintf('%s %s %-16s %4.0f ms  %s', $mark, mb_str_pad($said, 44), $tool, $ms, self::short($text)));
         }
         $output->writeln('');
-        $output->writeln(sprintf('<options=bold>%d attempts in %.0f ms: %d ran, %d wait for a human, %d refused — in code, whatever the prompt said.</>', \count($attempts), (microtime(true) - $t0) * 1000, $count['ran'], $count['held'], $count['refused']));
+        $output->writeln(\count($attempts) === $count['ran']
+            ? sprintf('<error>%d attempts in %.0f ms: all %d ran. Without Tool Guard, the prompt was the only lock.</error>', \count($attempts), (microtime(true) - $t0) * 1000, $count['ran'])
+            : sprintf('<options=bold>%d attempts in %.0f ms: %d ran, %d wait for a human, %d refused — in code, whatever the prompt said.</>', \count($attempts), (microtime(true) - $t0) * 1000, $count['ran'], $count['held'], $count['refused']));
 
         return Command::SUCCESS;
     }
@@ -81,7 +101,7 @@ final class AttackCommand extends Command
             return $m[1].' → request '.$m[2];
         }
 
-        return mb_substr($text, 0, 60);
+        return mb_substr((string) preg_replace('/\s+/', ' ', $text), 0, 60);
     }
 
     /** @return array<string, mixed> */

@@ -147,4 +147,20 @@ final class GuardTest extends TestCase
         file_put_contents($file, implode('', $lines));
         self::assertSame(2, $this->journal->verify());
     }
+
+    public function testARewrittenJournalIsCaughtByItsNotedHead(): void
+    {
+        $this->call('order', ['orderId' => 'A-1']);
+        $this->call('order', ['orderId' => 'B-7']);
+        $head = (string) $this->journal->head();
+        self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $head);
+        $this->call('order', ['orderId' => 'A-1']);
+        self::assertTrue($this->journal->contains($head), 'later lines keep the noted head in the chain');
+
+        // someone rewrites the whole file from scratch: a new chain, valid on its own
+        unlink($this->dir.'/journal.jsonl');
+        $this->call('order', ['orderId' => 'A-1']);
+        self::assertNull($this->journal->verify());
+        self::assertFalse($this->journal->contains($head));
+    }
 }

@@ -56,7 +56,7 @@ final class JsonlJournal implements Journal
     public function verify(): ?int
     {
         $prev = null;
-        foreach (@file($this->file, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES) ?: [] as $i => $line) {
+        foreach ($this->lines() as $i => $line) {
             $d = json_decode($line, true);
             if (!\is_array($d) || ($d['prev'] ?? null) !== $prev) {
                 return $i + 1;
@@ -65,6 +65,37 @@ final class JsonlJournal implements Journal
         }
 
         return null;
+    }
+
+    /**
+     * The hash of the last line: the chain's head. A chain only proves that nothing was removed
+     * or changed in the middle; someone who rewrites the whole file builds a new valid chain. Keep
+     * the head somewhere else (an email, a ticket, another server): contains() then tells whether
+     * the journal still holds that point.
+     */
+    public function head(): ?string
+    {
+        $lines = $this->lines();
+
+        return [] === $lines ? null : hash('sha256', $lines[\count($lines) - 1]);
+    }
+
+    /** Whether a head noted earlier is still one of the lines of the chain. */
+    public function contains(string $head): bool
+    {
+        foreach ($this->lines() as $line) {
+            if (hash_equals(hash('sha256', $line), strtolower(trim($head)))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return list<string> */
+    private function lines(): array
+    {
+        return @file($this->file, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES) ?: [];
     }
 
     /** @param resource $h */
