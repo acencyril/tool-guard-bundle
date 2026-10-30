@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Acencyril\ToolGuardBundle\Tests\Demo;
 
+use ToolGuardDemo\Command\RealModelAttackCommand;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Component\HttpClient\MockHttpClient;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -51,6 +55,34 @@ final class DemoCommandsTest extends TestCase
         } finally {
             null === $saved[0] || $_SERVER['HF_TOKEN'] = $saved[0];
             null === $saved[1] || $_SERVER['OPENROUTER_API_KEY'] = $saved[1];
+        }
+    }
+
+    public function testAFailedModelCallShowsWhatTheProviderAnswered(): void
+    {
+        $saved = $_SERVER['HF_TOKEN'] ?? null;
+        $_SERVER['HF_TOKEN'] = 'hf_test';
+        $requests = [];
+        RealModelAttackCommand::$http = new MockHttpClient(function (string $method, string $url, array $options) use (&$requests) {
+            $requests[] = $options['body'] ?? '';
+
+            return new MockResponse('{"error":"the provider explains what is wrong"}', ['http_code' => 400, 'response_headers' => ['content-type' => 'application/json']]);
+        });
+        try {
+            $kernel = new Kernel('test', true);
+            $tester = new CommandTester((new Application($kernel))->find('demo:attack-real-model'));
+            $tester->execute([], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE]);
+            self::assertStringContainsString('provider answered: 400 {"error":"the provider explains what is wrong"}', $tester->getDisplay());
+            self::assertStringContainsString('request: POST https://router.huggingface.co/v1/chat/completions', $tester->getDisplay());
+            self::assertStringContainsString('"tools"', (string) $requests[0], 'the shop tools are offered to the model');
+            file_put_contents(sys_get_temp_dir().'/toolguard-hf-request.json', $requests[0]);
+        } finally {
+            RealModelAttackCommand::$http = null;
+            if (null === $saved) {
+                unset($_SERVER['HF_TOKEN']);
+            } else {
+                $_SERVER['HF_TOKEN'] = $saved;
+            }
         }
     }
 }
