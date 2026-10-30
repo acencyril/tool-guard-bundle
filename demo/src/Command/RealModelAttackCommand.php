@@ -30,7 +30,10 @@ use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\AI\Platform\Bridge\HuggingFace\Contract\HuggingFaceContract;
+use Symfony\AI\Platform\Contract;
 use ToolGuardDemo\RecordingHttpClient;
+use ToolGuardDemo\ToolParametersNormalizer;
 use ToolGuardDemo\ShopTools;
 
 /**
@@ -101,8 +104,8 @@ final class RealModelAttackCommand extends Command
         $http = new RecordingHttpClient(self::$http ?? HttpClient::create());
         $platform = match (true) {
             $mock => self::obedientModel(),
-            'huggingface' === $provider => HuggingFace::createPlatform($key, httpClient: $http),
-            default => OpenRouter::createPlatform($key, httpClient: $http),
+            'huggingface' === $provider => HuggingFace::createPlatform($key, httpClient: $http, contract: HuggingFaceContract::create([new ToolParametersNormalizer()])),
+            default => OpenRouter::createPlatform($key, httpClient: $http, contract: Contract::create([new ToolParametersNormalizer()])),
         };
         $agent = new Agent($platform, $model, toolbox: new Toolbox([$this->tools], eventDispatcher: $this->events));
         $output->writeln(sprintf('<comment>%s (%s%s) runs the shop\'s support agent. Its rules are in its prompt, and in Tool Guard. The attacker is signed in as the customer "alice".</comment>', $mock ? 'A stand-in model, no key,' : 'A real model', $model, $mock ? '' : ' on '.('huggingface' === $provider ? 'Hugging Face Inference Providers' : 'OpenRouter')));

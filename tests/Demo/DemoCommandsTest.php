@@ -75,7 +75,8 @@ final class DemoCommandsTest extends TestCase
             self::assertStringContainsString('provider answered: 400 {"error":"the provider explains what is wrong"}', $tester->getDisplay());
             self::assertStringContainsString('request: POST https://router.huggingface.co/v1/chat/completions', $tester->getDisplay());
             self::assertStringContainsString('"tools"', (string) $requests[0], 'the shop tools are offered to the model');
-            file_put_contents(sys_get_temp_dir().'/toolguard-hf-request.json', $requests[0]);
+            // a tool without arguments still carries a parameter schema (Hugging Face refuses it otherwise)
+            self::assertStringContainsString('{"name":"export_customers","description":"Every customer with address","parameters":{"type":"object","properties":{}}}', (string) $requests[0]);
         } finally {
             RealModelAttackCommand::$http = null;
             if (null === $saved) {
