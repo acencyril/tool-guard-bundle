@@ -3,6 +3,9 @@
 name: Real model attack
 
 on:
+  # a push to run/real-model also runs it (with the default model)
+  push:
+    branches: ['run/real-model']
   workflow_dispatch:
     inputs:
       model:
@@ -27,7 +30,7 @@ jobs:
       - name: Attack
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          DEMO_MODEL: ${{ inputs.model }}
+          DEMO_MODEL: ${{ inputs.model || 'openai/gpt-4.1-mini' }}
         run: |
           php demo/bin/console demo:attack-real-model --no-ansi | tee transcript.txt
           { echo '```'; cat transcript.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
