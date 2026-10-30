@@ -258,6 +258,20 @@ The guard fails closed: a permission that cannot be checked (no security, no use
 On MCP, `#[Granted]` judges the user Symfony Security signed in on the MCP route: use the HTTP
 transport behind a firewall. Over stdio there is no user.
 
+## Feedback on the pre-releases
+
+Building Tool Guard meant running it against Symfony AI 1.0.0-BETA1 and the PHP MCP SDK main branch,
+with a real model on Hugging Face Inference Providers. What broke, reported upstream with a reproduction:
+
+- [modelcontextprotocol/php-sdk#640](https://github.com/modelcontextprotocol/php-sdk/issues/640) and
+  [#641](https://github.com/modelcontextprotocol/php-sdk/issues/641): tool arguments the SDK passes
+  differently from what the client sent (an explicit `null` ignored for a nullable parameter with a
+  default; PHPDoc pseudo-types such as `non-empty-string` turned into `object`, so valid calls are refused).
+  Tool Guard checks the raw arguments, so a difference between what it sees and what the tool receives matters.
+- A tool without arguments was sent without `parameters`, which Hugging Face refuses for the whole request:
+  already fixed upstream in [symfony/ai#2848](https://github.com/symfony/ai/pull/2848) after BETA1; the
+  demo carries a small normalizer until a release ships it (`demo/src/ToolParametersNormalizer.php`).
+
 ## Relation to Symfony AI's `#[IsGrantedTool]`
 
 Symfony AI already checks `#[IsGrantedTool]` on agent tools, the PHP MCP SDK can require OAuth
