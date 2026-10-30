@@ -190,10 +190,13 @@ php demo/bin/console demo:attack --url=http://127.0.0.1:8001
 ### With a real model
 
 The same attack, as messages to a real model running the shop's support agent (Symfony AI agent,
-any OpenRouter model with tool calling). It is a crash test, not a chatbot: the point is what
-the model gets talked into, and what Tool Guard then lets it do.
+any model with tool calling). It is a crash test, not a chatbot: the point is what the model gets
+talked into, and what Tool Guard then lets it do. On [Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers)
+(`symfony/ai-hugging-face-platform`, default model `openai/gpt-oss-120b`) or on OpenRouter:
 
 ```bash
+HF_TOKEN=hf_… php demo/bin/console demo:attack-real-model
+HF_TOKEN=hf_… php demo/bin/console demo:attack-real-model --model=Qwen/Qwen3-235B-A22B-Instruct-2507
 OPENROUTER_API_KEY=… php demo/bin/console demo:attack-real-model --model=openai/gpt-4.1-mini
 ```
 

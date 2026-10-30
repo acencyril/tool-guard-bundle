@@ -37,4 +37,20 @@ final class DemoCommandsTest extends TestCase
         self::assertStringContainsString('1 ran, 2 wait for a human, 6 refused', $out);
         self::assertStringContainsString('all 9 ran. Without Tool Guard, the prompt was the only lock.', $out);
     }
+
+    public function testTheRealModelAttackAsksForAKey(): void
+    {
+        $saved = [$_SERVER['HF_TOKEN'] ?? null, $_SERVER['OPENROUTER_API_KEY'] ?? null];
+        unset($_SERVER['HF_TOKEN'], $_SERVER['OPENROUTER_API_KEY']);
+        putenv('HF_TOKEN'); putenv('OPENROUTER_API_KEY');
+        try {
+            $kernel = new Kernel('test', true);
+            $tester = new CommandTester((new Application($kernel))->find('demo:attack-real-model'));
+            self::assertSame(1, $tester->execute([]));
+            self::assertStringContainsString('Set HF_TOKEN', $tester->getDisplay());
+        } finally {
+            null === $saved[0] || $_SERVER['HF_TOKEN'] = $saved[0];
+            null === $saved[1] || $_SERVER['OPENROUTER_API_KEY'] = $saved[1];
+        }
+    }
 }

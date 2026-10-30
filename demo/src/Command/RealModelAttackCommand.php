@@ -7,7 +7,8 @@ namespace ToolGuardDemo\Command;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Symfony\AI\Agent\Agent;
 use Symfony\AI\Agent\Toolbox\Toolbox;
-use Symfony\AI\Platform\Bridge\OpenRouter\Factory;
+use Symfony\AI\Platform\Bridge\HuggingFace\Factory as HuggingFace;
+use Symfony\AI\Platform\Bridge\OpenRouter\Factory as OpenRouter;
 use Symfony\AI\Platform\Message\Message;
 use Symfony\AI\Platform\Message\MessageBag;
 use Symfony\AI\Platform\PlatformInterface;
@@ -31,9 +32,9 @@ use ToolGuardDemo\ShopTools;
 
 /**
  * The attack of demo:attack, against a real model instead of a script: the shop's support agent
- * (Symfony AI, OpenRouter, any model with tool calling) receives the messages of a customer who
- * social-engineers it. Not a chatbot product: a crash test. What the model was talked into, and
- * what Tool Guard let it do, side by side. Needs OPENROUTER_API_KEY.
+ * (Symfony AI, a model with tool calling on Hugging Face Inference Providers or OpenRouter) receives
+ * the messages of a customer who social-engineers it. Not a chatbot product: a crash test. What the
+ * model was talked into, and what Tool Guard let it do, side by side. Needs HF_TOKEN or OPENROUTER_API_KEY.
  */
 #[AsCommand(name: 'demo:attack-real-model', description: 'The same attack against a real model: what it was talked into, what Tool Guard let it do')]
 final class RealModelAttackCommand extends Command
@@ -68,16 +69,18 @@ final class RealModelAttackCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('model', null, InputOption::VALUE_REQUIRED, 'An OpenRouter model with tool calling', $_SERVER['DEMO_MODEL'] ?? (getenv('DEMO_MODEL') ?: 'openai/gpt-4.1-mini'))
+        $this->addOption('provider', null, InputOption::VALUE_REQUIRED, 'huggingface (HF_TOKEN) or openrouter (OPENROUTER_API_KEY); by default, the one whose key is set')
+            ->addOption('model', null, InputOption::VALUE_REQUIRED, 'A model with tool calling (default: openai/gpt-oss-120b on Hugging Face, openai/gpt-4.1-mini on OpenRouter)', self::env('DEMO_MODEL') ?: null)
             ->addOption('mock', null, InputOption::VALUE_NONE, 'For tests: a stand-in model that does everything it is asked, no key');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $key = (string) ($_SERVER['OPENROUTER_API_KEY'] ?? getenv('OPENROUTER_API_KEY') ?: '');
         $mock = (bool) $input->getOption('mock');
+        $provider = (string) ($input->getOption('provider') ?: ('' !== self::env('HF_TOKEN') ? 'huggingface' : ('' !== self::env('OPENROUTER_API_KEY') ? 'openrouter' : '')));
+        $key = match ($provider) { 'huggingface' => self::env('HF_TOKEN'), 'openrouter' => self::env('OPENROUTER_API_KEY'), default => '' };
         if ('' === $key && !$mock) {
-            $output->writeln('<error>Set OPENROUTER_API_KEY (and optionally DEMO_MODEL). Without a key, demo:attack runs the same attack, scripted.</error>');
+            $output->writeln('<error>Set HF_TOKEN (Hugging Face Inference Providers) or OPENROUTER_API_KEY, and optionally --model. Without a key, demo:attack runs the same attack, scripted.</error>');
 
             return Command::FAILURE;
         }
@@ -88,9 +91,14 @@ final class RealModelAttackCommand extends Command
         // the customer is signed in, as she would be on the shop
         $this->tokens->setToken(new UsernamePasswordToken(new InMemoryUser('alice', null, ['ROLE_USER']), 'main', ['ROLE_USER']));
 
-        $model = $mock ? 'mock' : (string) $input->getOption('model');
-        $agent = new Agent($mock ? self::obedientModel() : Factory::createPlatform($key), $model, toolbox: new Toolbox([$this->tools], eventDispatcher: $this->events));
-        $output->writeln(sprintf('<comment>%s (%s) runs the shop\'s support agent. Its rules are in its prompt, and in Tool Guard. The attacker is signed in as the customer "alice".</comment>', $mock ? 'A stand-in model, no key,' : 'A real model', $model));
+        $model = $mock ? 'mock' : (string) ($input->getOption('model') ?: ('huggingface' === $provider ? 'openai/gpt-oss-120b' : 'openai/gpt-4.1-mini'));
+        $platform = match (true) {
+            $mock => self::obedientModel(),
+            'huggingface' === $provider => HuggingFace::createPlatform($key),
+            default => OpenRouter::createPlatform($key),
+        };
+        $agent = new Agent($platform, $model, toolbox: new Toolbox([$this->tools], eventDispatcher: $this->events));
+        $output->writeln(sprintf('<comment>%s (%s%s) runs the shop\'s support agent. Its rules are in its prompt, and in Tool Guard. The attacker is signed in as the customer "alice".</comment>', $mock ? 'A stand-in model, no key,' : 'A real model', $model, $mock ? '' : ' on '.('huggingface' === $provider ? 'Hugging Face Inference Providers' : 'OpenRouter')));
 
         $messages = new MessageBag(Message::forSystem(self::SYSTEM));
         $seen = 0;
@@ -124,6 +132,11 @@ final class RealModelAttackCommand extends Command
             array_sum($tally), $tally['allow'], $tally['pending'], $tally['deny']));
 
         return Command::SUCCESS;
+    }
+
+    private static function env(string $name): string
+    {
+        return (string) ($_SERVER[$name] ?? (getenv($name) ?: ''));
     }
 
     /** A stand-in for tests: asks for exactly what each message requests, then says it is done. */
