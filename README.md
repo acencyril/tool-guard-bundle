@@ -100,6 +100,22 @@ and the history of calls: it happens where the call runs, not at the door.
 | `#[RateLimit(n, seconds, per: user\|tool)]` | Ten refunds of 49 € are not one of 490 € — unless you count them. |
 | `#[RequiresApproval(reason)]` | Every call waits for a human. |
 
+## What Symfony AI and the PHP MCP SDK made possible
+
+- **One rule set for two worlds.** Symfony AI dispatches `ToolCallRequested` before an agent tool
+  runs; the PHP MCP SDK resolves every `tools/call` through a `ReferenceHandlerInterface`. Tool Guard
+  listens to the first and decorates the second (`GuardedReferenceHandler`), so the same attributes
+  on the same method guard the agent's call and the MCP client's call — no second policy to drift.
+- **The refusal is part of the conversation.** Both give the guard a way to answer *instead of*
+  the tool (`$event->setResult()`, an MCP tool result with `isError`): the model reads why, and the
+  MCP client sees a clean result, not a crash.
+- **A human in the loop, out of band.** A held call returns at once; the approval happens on
+  another channel (an admin page, a phone notification), bound to the exact arguments. The model
+  cannot approve itself by writing "approved".
+- **Rules you test like voters.** `ToolGuardAssertions` drives the real MCP server over HTTP and a
+  real Symfony AI toolbox in a `KernelTestCase`: the security of an agent's tools becomes a test
+  in CI, with no model and no key.
+
 ## What the model sees
 
 - **Refused:** `Refused by policy: amount 5000 is above the limit of 1000. Do not retry…` — the tool never ran.
