@@ -27,4 +27,14 @@ final class DemoCommandsTest extends TestCase
         self::assertStringContainsString('9 tool calls: 1 ran, 2 wait for a human, 6 refused', $out);
         $kernel->shutdown();
     }
+
+    /** The README's one command: both shops, attacked over real HTTP by demo/run.sh. */
+    public function testTheOneCommandDemo(): void
+    {
+        exec('sh '.escapeshellarg(\dirname(__DIR__, 2).'/demo/run.sh').' 2>&1', $out, $code);
+        $out = implode("\n", $out);
+        self::assertSame(0, $code, $out);
+        self::assertStringContainsString('1 ran, 2 wait for a human, 6 refused', $out);
+        self::assertStringContainsString('all 9 ran. Without Tool Guard, the prompt was the only lock.', $out);
+    }
 }
