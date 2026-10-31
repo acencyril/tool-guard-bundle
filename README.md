@@ -280,7 +280,12 @@ tool_guard:
     journal: '%kernel.project_dir%/var/tool_guard/journal.jsonl'
     approver_role: ROLE_ADMIN
     cache: cache.app          # counts #[RateLimit]
+    max_pending_per_user: 3   # requests one user may have waiting for a human; more are refused
 ```
+
+A flood of risky calls never floods the approver: a user has at most `max_pending_per_user` requests
+waiting (so at most that many phone notifications); the next ones are refused until a human decides.
+Held calls also count against `#[RateLimit]`.
 
 The guard fails closed: a permission that cannot be checked (no security, no user) refuses.
 
