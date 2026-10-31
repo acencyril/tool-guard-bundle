@@ -1,9 +1,15 @@
 # Tool Guard for Symfony AI and MCP
 
+[![tests](https://github.com/acencyril/tool-guard-bundle/actions/workflows/tests.yml/badge.svg)](https://github.com/acencyril/tool-guard-bundle/actions/workflows/tests.yml)
+
+**Your AI agent can be talked into refunding 640 €. Tool Guard stops it, in code.**
+
 **A prompt is not a lock.** When an AI agent can refund, email or delete, the rules can't live
 in its prompt: a persuasive user talks the model out of them. Tool Guard puts the rules in code,
 on the tools themselves. Whatever the model was talked into, a refused call never runs, and a
 risky one waits for a human.
+
+![The one-command demo: a hostile agent attacks a shop over MCP, with Tool Guard (refused, held) and without it (all 9 attacks ran)](docs/demo.gif)
 
 ## Try it in one command
 

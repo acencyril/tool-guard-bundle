@@ -50,6 +50,8 @@ final class Kernel extends BaseKernel
             'approvals_dir' => '%kernel.project_dir%/approvals', 'journal' => '%kernel.project_dir%/journal.jsonl',
         ]);
         $s = $c->services()->defaults()->autowire()->autoconfigure();
+        // the expected 403 of a test would otherwise be logged to the console as an "[error]"
+        $s->set('logger', \Psr\Log\NullLogger::class);
         $s->set(McpShopTools::class);
         $s->set(OrderVoter::class);
     }
