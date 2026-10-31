@@ -110,6 +110,24 @@ and the history of calls: it happens where the call runs, not at the door.
 | `#[RateLimit(n, seconds, per: user\|tool)]` | Ten refunds of 49 € are not one of 490 € — unless you count them. |
 | `#[RequiresApproval(reason)]` | Every call waits for a human. |
 
+## What the MCP specification asks of a tool server
+
+The [MCP specification](https://modelcontextprotocol.io/specification/latest/server/tools) says that
+"there **SHOULD** always be a human in the loop with the ability to deny tool invocations", and lists
+what servers **MUST** do and clients **SHOULD** do. Tool Guard gives a Symfony MCP server each of them, one
+attribute per rule:
+
+| The specification | Tool Guard |
+|---|---|
+| Servers **MUST** validate all tool inputs | `#[Limit]` (missing, not a number, infinite or out of range: refused) |
+| Servers **MUST** implement proper access controls | `#[Granted]`, with your Symfony voters and the tool argument as subject |
+| Servers **MUST** rate limit tool invocations | `#[RateLimit]` |
+| A human in the loop able to deny tool invocations; confirmation on sensitive operations | `#[RequiresApproval]`, or `#[Limit(above: Limit::APPROVAL)]` above a threshold: approved on another channel, on the exact arguments |
+| Log tool usage for audit purposes | the hash-chained journal (`tool-guard:approvals verify`) |
+
+The human only sees what crosses a line: below the threshold the agent acts alone (the 20 € refund
+of the demo runs without anyone).
+
 ## What Symfony AI and the PHP MCP SDK made possible
 
 - **One rule set for two worlds.** Symfony AI dispatches `ToolCallRequested` before an agent tool
