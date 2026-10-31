@@ -13,7 +13,7 @@ risky one waits for a human.
 
 Reviewing it? The [judge guide](docs/judges.md) runs it in 2 minutes and points to the code that matters.
 
-▶ **The 80-second video:** [youtube.com/watch?v=OKZ293RMX0A](https://www.youtube.com/watch?v=OKZ293RMX0A) — the scripted attack, then a real model talked into a 640 € refund that Tool Guard holds for a human.
+▶ **The 90-second video:** [youtube.com/watch?v=BkBSQzF26Os](https://www.youtube.com/watch?v=BkBSQzF26Os) — the scripted attack, then a real model talked into a 640 € refund that Tool Guard holds for a human, while the approver's phone gets the request.
 
 ## Try it in one command
 
