@@ -11,6 +11,8 @@ risky one waits for a human.
 
 ![The one-command demo: a hostile agent attacks a shop over MCP, with Tool Guard (refused, held) and without it (all 9 attacks ran)](docs/demo.gif)
 
+▶ **The 80-second video:** [youtube.com/watch?v=OKZ293RMX0A](https://www.youtube.com/watch?v=OKZ293RMX0A) — the scripted attack, then a real model talked into a 640 € refund that Tool Guard holds for a human.
+
 ## Try it in one command
 
 No API key, no model, no database. A scripted hostile agent attacks a demo shop over MCP, first
