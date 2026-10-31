@@ -39,7 +39,7 @@ use ToolGuardDemo\ShopTools;
 /**
  * The attack of demo:attack, against a real model instead of a script: the shop's support agent
  * (Symfony AI, a model with tool calling on Hugging Face Inference Providers or OpenRouter) receives
- * the messages of a customer who social-engineers it. Not a chatbot product: a crash test. What the
+ * the messages of a customer who social-engineers it. Not a chatbot product: an attack scenario. What the
  * model was talked into, and what Tool Guard let it do, side by side. Needs HF_TOKEN or OPENROUTER_API_KEY.
  */
 #[AsCommand(name: 'demo:attack-real-model', description: 'The same attack against a real model: what it was talked into, what Tool Guard let it do')]
