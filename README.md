@@ -170,6 +170,29 @@ php bin/console tool-guard:approvals approve 3f9a12c0
 php bin/console tool-guard:approvals verify     # the journal was not edited
 ```
 
+### On Slack, Teams, Telegram, email or SMS: Symfony Notifier
+
+The channels your app already has in `framework.notifier` carry the request, with the policy's
+reason, the raw arguments and a link to the approvals page:
+
+```yaml
+framework:
+    notifier:
+        chatter_transports:
+            slack: '%env(SLACK_DSN)%'          # or Teams, Telegram, Discord, Google Chat…
+        admin_recipients:
+            - { email: boss@shop.example }      # who gets the email and SMS channels
+
+tool_guard:
+    notifier:
+        channels: ['chat/slack', 'email']       # or empty: framework.notifier.channel_policy for the importance
+        importance: high
+        approvals_url: 'https://shop.example/admin/ai/approvals'
+```
+
+`composer require symfony/notifier` and the bridge of your channel (`symfony/slack-notifier`…). A failed
+notification never blocks the guard: the request still waits on the page.
+
 ### On your phone
 
 ```yaml

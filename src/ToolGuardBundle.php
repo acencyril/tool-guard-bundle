@@ -12,15 +12,17 @@ use Acencyril\ToolGuardBundle\Controller\ApprovalsController;
 use Acencyril\ToolGuardBundle\DependencyInjection\GuardPass;
 use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
 use Acencyril\ToolGuardBundle\Integration\Agent\GuardToolCalls;
-use Acencyril\ToolGuardBundle\Notify\NtfyNotifier;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
+use Acencyril\ToolGuardBundle\Notify\NtfyNotifier;
+use Acencyril\ToolGuardBundle\Notify\SymfonyNotifierListener;
 use Symfony\AI\Agent\Toolbox\Event\ToolCallRequested;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
+use Symfony\Component\Notifier\NotifierInterface;
 
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service_locator;
@@ -49,11 +51,18 @@ final class ToolGuardBundle extends AbstractBundle
                         ->scalarNode('token')->defaultNull()->end()
                     ->end()
                 ->end()
+                ->arrayNode('notifier')->info('Tell the approvers through Symfony Notifier: the channels the app already has (Slack, Teams, Telegram, email, SMS…)')->canBeEnabled()
+                    ->children()
+                        ->enumNode('importance')->values(['urgent', 'high', 'medium', 'low'])->defaultValue('high')->info('Picks the channels from framework.notifier.channel_policy when no channel is listed')->end()
+                        ->arrayNode('channels')->scalarPrototype()->end()->info('e.g. ["chat/slack", "email"]; empty: the channel policy of the importance')->end()
+                        ->scalarNode('approvals_url')->defaultNull()->info('The approvals page, absolute, linked from the message')->end()
+                    ->end()
+                ->end()
                 ->integerNode('max_pending_per_user')->defaultValue(3)->min(1)->info('Requests one user may have waiting; more are refused')->end()
             ->end();
     }
 
-    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}} $config */
+    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}, notifier: array{enabled: bool, importance?: string, channels?: list<string>, approvals_url?: ?string}} $config */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $container->parameters()
@@ -74,6 +83,14 @@ final class ToolGuardBundle extends AbstractBundle
         if ($config['ntfy']['enabled']) {
             $s->set(NtfyNotifier::class)
                 ->args([service('http_client'), $config['ntfy']['topic_url'], $config['ntfy']['approvals_url'], $config['ntfy']['token'], service('logger')->nullOnInvalid()])
+                ->tag('kernel.event_listener', ['event' => ApprovalRequested::class]);
+        }
+        if ($config['notifier']['enabled']) {
+            if (!interface_exists(NotifierInterface::class)) {
+                throw new \LogicException('tool_guard.notifier needs Symfony Notifier: composer require symfony/notifier');
+            }
+            $s->set(SymfonyNotifierListener::class)
+                ->args([service('notifier'), $config['notifier']['importance'], $config['notifier']['channels'], $config['notifier']['approvals_url'], service('logger')->nullOnInvalid()])
                 ->tag('kernel.event_listener', ['event' => ApprovalRequested::class]);
         }
         if (class_exists(ToolCallRequested::class)) {

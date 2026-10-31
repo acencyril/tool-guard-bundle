@@ -39,6 +39,14 @@ final class AppTest extends WebTestCase
         self::assertMatchesRegularExpression('/Request ([a-f0-9]{8}) has been sent/', $held['content'][0]['text']);
         preg_match('/Request ([a-f0-9]{8})/', $held['content'][0]['text'], $m);
 
+        // the approvers are told on the app's own chat channel, through Symfony Notifier
+        self::assertNotificationCount(1);
+        $chat = self::getNotifierMessage();
+        self::assertNotNull($chat);
+        self::assertNotificationSubjectContains($chat, 'AI action waiting: refund');
+        self::assertNotificationSubjectContains($chat, 'amount 500 is above the limit of 50');
+        self::assertNotificationSubjectContains($chat, 'https://shop.test/admin/ai/approvals#r-'.$m[1]);
+
         self::assertSame('pong', $this->call($client, $session, 'alice', 'ping', [])['content'][0]['text']);
         self::assertSame(['refund A-1 20.00'], McpShopTools::$ran, 'only the allowed refund ran');
 

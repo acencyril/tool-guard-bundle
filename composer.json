@@ -37,6 +37,7 @@
         "symfony/framework-bundle": "^7.4",
         "symfony/http-client": "^7.4",
         "symfony/mcp-bundle": "^1.0@beta",
+        "symfony/notifier": "^7.4",
         "symfony/security-bundle": "^7.4",
         "symfony/twig-bundle": "^7.4",
         "symfony/validator": "^7.4"
@@ -44,6 +45,7 @@
     "suggest": {
         "symfony/ai-bundle": "Guard the tools of Symfony AI agents",
         "symfony/mcp-bundle": "Guard the tools of your MCP servers",
+        "symfony/notifier": "Tell the approvers on Slack, Teams, Telegram, email or SMS when a call waits",
         "symfony/security-bundle": "#[Granted] checks and the approver's identity",
         "symfony/twig-bundle": "The approvals page"
     },

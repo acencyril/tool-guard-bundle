@@ -46,7 +46,7 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 | Symfony AI agent tools | `src/Integration/Agent/GuardToolCalls.php` (listens to `ToolCallRequested`, answers instead of the tool) |
 | MCP tools | `src/Integration/Mcp/GuardedReferenceHandler.php` (decorates the PHP MCP SDK's `ReferenceHandlerInterface`) |
 | A rule on an argument the method doesn't take fails the build | `src/DependencyInjection/GuardPass.php` |
-| Human approval | `src/Approval/`, `src/Controller/ApprovalsController.php`, `src/Notify/NtfyNotifier.php` |
+| Human approval | `src/Approval/`, `src/Controller/ApprovalsController.php`; the approvers are told through Symfony Notifier (`src/Notify/SymfonyNotifierListener.php`, any channel of `framework.notifier`) or ntfy (`src/Notify/NtfyNotifier.php`) |
 | The hash-chained journal | `src/Journal/JsonlJournal.php` |
 | Testing agent permissions in CI | `src/Test/ToolGuardAssertions.php` |
 
@@ -56,7 +56,7 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 vendor/bin/phpunit
 ```
 
-25 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
+28 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
 `tests/Demo/DemoRulesTest.php` (the nine attacks, and the tricks a reviewer tries: the amount left
 out, text for a number, a negative refund, infinity, someone else's order) and
 `tests/IntegrationTest.php` (a Symfony AI toolbox and an MCP server never run a refused or held call).

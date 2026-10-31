@@ -35,6 +35,8 @@ final class Kernel extends BaseKernel
             'test' => true, 'secret' => 'test', 'http_method_override' => false,
             'session' => ['storage_factory_id' => 'session.storage.factory.mock_file'],
             'csrf_protection' => true, 'router' => ['utf8' => true],
+            // the approvers' chat: a null transport, so a test can read what was sent
+            'notifier' => ['chatter_transports' => ['team' => 'null://null']],
         ]);
         $c->extension('security', [
             'password_hashers' => ['Symfony\Component\Security\Core\User\InMemoryUser' => 'plaintext'],
@@ -48,6 +50,7 @@ final class Kernel extends BaseKernel
         $c->extension('mcp', ['servers' => ['shop' => ['http' => ['path' => '/mcp', 'allowed_hosts' => ['localhost']], 'registry' => '*']]]);
         $c->extension('tool_guard', [
             'approvals_dir' => '%kernel.project_dir%/approvals', 'journal' => '%kernel.project_dir%/journal.jsonl',
+            'notifier' => ['channels' => ['chat/team'], 'approvals_url' => 'https://shop.test/admin/ai/approvals'],
         ]);
         $s = $c->services()->defaults()->autowire()->autoconfigure();
         // the expected 403 of a test would otherwise be logged to the console as an "[error]"
