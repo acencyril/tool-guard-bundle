@@ -28,7 +28,7 @@ composer install && sh demo/run.sh
 No PHP 8.2+ on your machine? Docker only:
 
 ```bash
-docker run --rm -v "$PWD":/app -w /app composer:2 sh demo/run.sh
+docker run --rm --user "$(id -u):$(id -g)" -e COMPOSER_HOME=/tmp/composer -v "$PWD":/app -w /app composer:2 sh demo/run.sh
 ```
 
 ```

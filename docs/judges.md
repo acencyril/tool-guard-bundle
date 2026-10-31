@@ -9,7 +9,7 @@ git clone https://github.com/acencyril/tool-guard-bundle && cd tool-guard-bundle
 composer install && sh demo/run.sh
 ```
 
-No PHP on the machine: `docker run --rm -v "$PWD":/app -w /app composer:2 sh demo/run.sh`.
+No PHP on the machine: `docker run --rm --user "$(id -u):$(id -g)" -e COMPOSER_HOME=/tmp/composer -v "$PWD":/app -w /app composer:2 sh demo/run.sh`.
 
 What you should see: a scripted hostile agent connects to a demo shop over MCP and tries nine things a
 talked-into model would try. With Tool Guard: 1 ran, 2 wait for a human, 6 refused. The same shop

@@ -2,7 +2,7 @@
 # The whole demo in one command: the shop with Tool Guard, then the same shop without it,
 # each attacked by the same scripted agent over MCP. No API key, no database.
 #   sh demo/run.sh
-#   docker run --rm -v "$PWD":/app -w /app composer:2 sh demo/run.sh
+#   docker run --rm --user "$(id -u):$(id -g)" -e COMPOSER_HOME=/tmp/composer -v "$PWD":/app -w /app composer:2 sh demo/run.sh
 set -e
 cd "$(dirname "$0")/.."
 [ -d vendor ] || composer install --no-interaction --no-progress --quiet
