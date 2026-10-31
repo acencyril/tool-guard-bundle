@@ -1,18 +1,21 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<meta charset="utf-8"><script>try{var t=localStorage.getItem('tool_guard_theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
 <title>AI actions waiting for a human</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--fg:#14161b;--muted:#5d6370;--line:#e1e4ea;--ok:#147a4b;--bad:#b42318;--warn:#8a5a00;color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a}}
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14161b;--muted:#5d6370;--line:#e1e4ea;--ok:#147a4b;--bad:#b42318;--warn:#8a5a00;--on-ok:#fff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a;--on-ok:#08170f;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a;--on-ok:#08170f;color-scheme:dark}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.theme{flex:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:99px}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}main{max-width:900px;margin:0 auto;padding:24px 16px}
 h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 10px}.sub{color:var(--muted);margin:0 0 20px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 12px}
 .tool{font-weight:700}.why{color:var(--warn);font-weight:600}.meta{color:var(--muted);font-size:13px}
 pre{background:var(--bg);border-radius:8px;padding:10px;overflow:auto;font-size:13px;margin:10px 0}
 .acts{display:flex;gap:8px;flex-wrap:wrap}.acts form{margin:0}button{font:inherit;font-weight:700;padding:9px 16px;border-radius:9px;border:1px solid var(--line);cursor:pointer;background:var(--card);color:var(--fg)}
-button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.no{color:var(--bad);border-color:var(--bad)}
+button.ok{background:var(--ok);border-color:var(--ok);color:var(--on-ok)}button.no{color:var(--bad);border-color:var(--bad)}
 .tag{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 8px}.approved,.allow{color:var(--ok)}.rejected,.failed,.deny{color:var(--bad)}.pending{color:var(--warn)}.expired{color:var(--muted)}
 .notice{border-left:4px solid var(--warn)}.observe{border-left:4px solid var(--ok)}.would{color:var(--warn);font-size:12px;font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}
@@ -20,7 +23,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 </style>
 </head>
 <body><main>
-<h1>AI actions waiting for a human</h1>
+<div class="top"><h1>AI actions waiting for a human</h1><button class="theme" type="button" id="theme" aria-label="Switch between light and dark theme">◐ Theme</button></div>
 <p class="sub">An AI asked for these. They have not run. Read the arguments: approving runs the action exactly as shown.{% if expire_after %} A request expires after {{ expire_after >= 3600 ? (expire_after / 3600)|round(1, 'floor') ~ ' h' : (expire_after / 60)|round ~ ' min' }}.{% endif %}</p>
 {% if mode == 'observe' %}<p class="card observe"><strong>Observe mode.</strong> Nothing is blocked: every call runs, and the journal shows what Tool Guard would have refused or held. Set <code>tool_guard.mode: enforce</code> when the rules look right.</p>{% endif %}
 {% for message in app.flashes('tool_guard') %}<p class="card notice">{{ message }}</p>{% endfor %}
@@ -56,4 +59,14 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <td><span class="{{ outcome }}">{{ outcome }}</span>{% if e.would ?? null %} <span class="would">would be {{ e.would == 'deny' ? 'refused' : 'held' }}</span>{% endif %}{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
 {% endfor %}
 </tbody></table>
-</main></body></html>
+</main>
+<script>
+// light, dark, or the system's choice: remembered in this browser only
+document.getElementById('theme').addEventListener('click', function () {
+    var root = document.documentElement;
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('tool_guard_theme', root.dataset.theme); } catch (e) {}
+});
+</script>
+</body></html>

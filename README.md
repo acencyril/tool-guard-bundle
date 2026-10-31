@@ -157,6 +157,8 @@ the console. Approve runs the tool once, with the arguments shown; reject runs n
 
 ![The approvals page: each held call with the policy's reason and its exact arguments, Approve and run / Reject, and the hash-chained journal below](docs/approvals.png)
 
+It follows the system's light or dark mode, and its **◐ Theme** button switches by hand ([dark screenshot](docs/approvals-dark.png)).
+
 The approver is never the person in the conversation: asking them would ask the attacker. And the
 approval itself is guarded:
 
