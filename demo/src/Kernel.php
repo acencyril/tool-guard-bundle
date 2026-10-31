@@ -10,6 +10,7 @@ use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
 use Symfony\Bundle\TwigBundle\TwigBundle;
+use Symfony\Bundle\WebProfilerBundle\WebProfilerBundle;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Kernel as BaseKernel;
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
@@ -19,6 +20,7 @@ use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
  * approves), the approvals page at /admin/ai/approvals. TOOL_GUARD_NTFY_TOPIC set: held calls
  * buzz the phone subscribed to https://ntfy.sh/<topic>. DEMO_UNGUARDED=1: the same shop, the same
  * tools, without Tool Guard — to see what the hostile agent gets when the prompt is the only lock.
+ * DEMO_PROFILER=1: the Symfony profiler, with the Tool Guard panel of every MCP request (/_profiler).
  */
 final class Kernel extends BaseKernel
 {
@@ -26,15 +28,27 @@ final class Kernel extends BaseKernel
 
     public function registerBundles(): iterable
     {
-        return self::unguarded()
-            ? [new FrameworkBundle(), new SecurityBundle(), new TwigBundle(), new McpBundle()]
-            : [new FrameworkBundle(), new SecurityBundle(), new TwigBundle(), new McpBundle(), new ToolGuardBundle()];
+        yield new FrameworkBundle();
+        yield new SecurityBundle();
+        yield new TwigBundle();
+        yield new McpBundle();
+        if (!self::unguarded()) {
+            yield new ToolGuardBundle();
+        }
+        if ($this->profiler()) {
+            yield new WebProfilerBundle();
+        }
     }
 
     /** One compiled container per setting: changing an environment variable needs no cache clear. */
     public function getCacheDir(): string
     {
-        return parent::getCacheDir().'-'.substr(md5(self::env('DEMO_UNGUARDED').'|'.self::env('TOOL_GUARD_NTFY_TOPIC').'|'.self::env('DEMO_URL')), 0, 8);
+        return parent::getCacheDir().'-'.substr(md5(self::env('DEMO_UNGUARDED').'|'.self::env('TOOL_GUARD_NTFY_TOPIC').'|'.self::env('DEMO_URL').'|'.self::env('DEMO_PROFILER')), 0, 8);
+    }
+
+    private function profiler(): bool
+    {
+        return $this->debug && '1' === self::env('DEMO_PROFILER') && 'test' !== $this->environment && class_exists(WebProfilerBundle::class);
     }
 
     private static function unguarded(): bool
@@ -60,21 +74,25 @@ final class Kernel extends BaseKernel
             'csrf_protection' => true, 'router' => ['utf8' => true], 'http_client' => true,
             'test' => 'test' === $this->environment,
             'session' => 'test' === $this->environment ? ['storage_factory_id' => 'session.storage.factory.mock_file'] : true,
-        ]);
+        ] + ($this->profiler() ? ['profiler' => ['collect' => true]] : []));
+        if ($this->profiler()) {
+            $c->extension('web_profiler', ['toolbar' => true]);
+        }
         $c->extension('security', [
             'password_hashers' => ['Symfony\Component\Security\Core\User\InMemoryUser' => 'plaintext'],
             'providers' => ['users' => ['memory' => ['users' => [
                 'alice' => ['password' => 'alice', 'roles' => ['ROLE_USER']],
                 'boss' => ['password' => 'boss', 'roles' => ['ROLE_ADMIN']],
             ]]]],
-            'firewalls' => ['main' => ['http_basic' => ['realm' => 'Tool Guard demo']]],
+            'firewalls' => ['dev' => ['pattern' => '^/(_profiler|_wdt)', 'security' => false], 'main' => ['http_basic' => ['realm' => 'Tool Guard demo']]],
             'access_control' => [['path' => '^/', 'roles' => 'IS_AUTHENTICATED_FULLY']],
         ]);
         $c->extension('mcp', ['servers' => ['shop' => ['http' => ['path' => '/mcp', 'allowed_hosts' => ['localhost', '127.0.0.1']], 'registry' => ['tools' => ['ToolGuardDemo\\']]]]]);
         $topic = self::env('TOOL_GUARD_NTFY_TOPIC');
-        self::unguarded() || $c->extension('tool_guard', '' === $topic ? [] : ['ntfy' => [
+        // four eyes: the boss approves what alice's agent asked, nobody approves a call made for themselves
+        self::unguarded() || $c->extension('tool_guard', ['four_eyes' => true] + ('' === $topic ? [] : ['ntfy' => [
             'topic_url' => 'https://ntfy.sh/'.$topic, 'approvals_url' => (self::env('DEMO_URL') ?: 'http://127.0.0.1:8000').'/admin/ai/approvals',
-        ]]);
+        ]]));
         $s = $c->services()->defaults()->autowire()->autoconfigure();
         $s->set(Shop::class)->arg('$file', '%kernel.project_dir%/var/shop.json');
         $s->set(ShopTools::class);
@@ -86,6 +104,10 @@ final class Kernel extends BaseKernel
     protected function configureRoutes(RoutingConfigurator $routes): void
     {
         $routes->import('.', 'mcp');
+        if ($this->profiler()) {
+            $routes->import('@WebProfilerBundle/Resources/config/routing/wdt.php')->prefix('/_wdt');
+            $routes->import('@WebProfilerBundle/Resources/config/routing/profiler.php')->prefix('/_profiler');
+        }
         if (self::unguarded()) {
             return;
         }

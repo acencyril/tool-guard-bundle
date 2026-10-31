@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Acencyril\ToolGuardBundle\Approval;
 
-/** One JSON file per request in a folder (default var/tool_guard/approvals), written atomically. */
+/**
+ * One JSON file per request in a folder (default var/tool_guard/approvals), written atomically.
+ * A claim is a file created with mode "x": the filesystem lets exactly one process create it.
+ */
 final class FilesystemApprovalStore implements ApprovalStore
 {
     public function __construct(private readonly string $dir)
@@ -47,6 +50,20 @@ final class FilesystemApprovalStore implements ApprovalStore
         usort($list, static fn (Approval $a, Approval $b) => $b->requestedAt <=> $a->requestedAt);
 
         return \array_slice($list, 0, $limit);
+    }
+
+    public function claim(string $id): bool
+    {
+        if (1 !== preg_match('/^[a-f0-9]{8}$/', $id) || !is_file($this->path($id))) {
+            return false;
+        }
+        $h = @fopen($this->dir.'/'.$id.'.claim', 'x');
+        if (false === $h) {
+            return false;
+        }
+        fclose($h);
+
+        return true;
     }
 
     private function path(string $id): string

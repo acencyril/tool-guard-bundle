@@ -12,7 +12,11 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 /**
  * A human's decision on a held call. Approve: the tool runs now, once, with the arguments that
  * were asked (shown to the approver), and its result is kept. Reject: nothing runs. Either way,
- * the journal and an ApprovalDecided event. A decided request cannot be decided again.
+ * the journal and an ApprovalDecided event.
+ *
+ * Exactly one decision per request: it is claimed in the store before the tool runs, so two
+ * approvers clicking at once run it once. A request older than $expireAfter seconds can no longer
+ * be approved (it is closed as expired). With $fourEyes, nobody approves a call made for themselves.
  */
 final class Approver
 {
@@ -21,12 +25,18 @@ final class Approver
         private readonly ContainerInterface $tools,
         private readonly Journal $journal,
         private readonly ?EventDispatcherInterface $events = null,
+        private readonly ?int $expireAfter = null,
+        private readonly bool $fourEyes = false,
     ) {
     }
 
     public function approve(string $id, ?string $by): Approval
     {
         $a = $this->pending($id);
+        if ($this->fourEyes && null !== $a->requestedBy && $by === $a->requestedBy) {
+            throw new \LogicException(sprintf('Request "%s" was made for %s: another approver must decide it.', $id, $by));
+        }
+        $this->claim($a);
         try {
             $result = $this->run($a);
             $a->status = Approval::APPROVED;
@@ -42,6 +52,7 @@ final class Approver
     public function reject(string $id, ?string $by): Approval
     {
         $a = $this->pending($id);
+        $this->claim($a);
         $a->status = Approval::REJECTED;
 
         return $this->close($a, $by);
@@ -53,8 +64,27 @@ final class Approver
         if (Approval::PENDING !== $a->status) {
             throw new \LogicException(sprintf('Request "%s" is already %s.', $id, $a->status));
         }
+        if ($a->expired($this->expireAfter)) {
+            if ($this->store->claim($a->id)) {
+                $a->status = Approval::EXPIRED;
+                $this->close($a, null);
+            }
+            throw new \LogicException(sprintf('Request "%s" expired: it waited more than %s.', $id, self::duration((int) $this->expireAfter)));
+        }
 
         return $a;
+    }
+
+    private function claim(Approval $a): void
+    {
+        if (!$this->store->claim($a->id)) {
+            throw new \LogicException(sprintf('Request "%s" is already being decided.', $a->id));
+        }
+    }
+
+    private static function duration(int $s): string
+    {
+        return 0 === $s % 3600 ? ($s / 3600).' hour(s)' : (0 === $s % 60 ? ($s / 60).' minute(s)' : $s.' seconds');
     }
 
     private function close(Approval $a, ?string $by): Approval

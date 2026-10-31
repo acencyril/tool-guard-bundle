@@ -10,6 +10,7 @@ use Acencyril\ToolGuardBundle\Invocation;
 use Acencyril\ToolGuardBundle\Notify\HeldCallNotification;
 use Acencyril\ToolGuardBundle\Notify\SymfonyNotifierListener;
 use PHPUnit\Framework\TestCase;
+use Symfony\Bridge\Twig\Mime\NotificationEmail;
 use Symfony\Component\Notifier\Notification\Notification;
 use Symfony\Component\Notifier\NotifierInterface;
 use Symfony\Component\Notifier\Recipient\Recipient;
@@ -53,6 +54,20 @@ final class SymfonyNotifierListenerTest extends TestCase
 
         self::assertSame("🔒 AI action waiting: refund\namount 500 is above the limit of 50\n{\"amount\":500}", $n->asChatMessage(new Recipient('boss@shop.test'))?->getSubject());
         self::assertSame('AI action waiting: refund: amount 500 is above the limit of 50', $n->asSmsMessage(new Recipient('', '+33600000000'))?->getSubject());
+    }
+
+    public function testAnEmailCarriesAReviewButtonToTheRequest(): void
+    {
+        $n = (new HeldCallNotification('AI action waiting: refund', ['email'], 'https://shop.test/admin/ai/approvals#r-ab12cd34'))
+            ->content('amount 500 is above the limit of 50')->importance(Notification::IMPORTANCE_URGENT);
+        $email = $n->asEmailMessage(new Recipient('boss@shop.test'))?->getMessage();
+
+        self::assertInstanceOf(NotificationEmail::class, $email);
+        self::assertSame('AI action waiting: refund', $email->getSubject());
+        self::assertSame('boss@shop.test', $email->getTo()[0]->getAddress());
+        self::assertSame('Review the request', $email->getContext()['action_text']);
+        self::assertSame('https://shop.test/admin/ai/approvals#r-ab12cd34', $email->getContext()['action_url']);
+        self::assertSame('amount 500 is above the limit of 50', $email->getContext()['content']);
     }
 
     public function testAFailedNotificationNeverBreaksTheGuard(): void

@@ -11,10 +11,14 @@ use Acencyril\ToolGuardBundle\Attribute\Limit;
 use Acencyril\ToolGuardBundle\Attribute\RateLimit;
 use Acencyril\ToolGuardBundle\Attribute\RequiresApproval;
 use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
+use Acencyril\ToolGuardBundle\Event\ToolCallDecided;
 use Acencyril\ToolGuardBundle\Event\ToolCallRefused;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\Storage\CacheStorage;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
@@ -27,9 +31,16 @@ use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
  * model wrote: the model cannot write its own justification onto the approver's screen.
  *
  * Fails closed: an attribute that cannot be checked (no security, an argument missing) refuses.
+ *
+ * Observe mode (mode: observe) applies nothing: every call runs, and the journal records what
+ * enforce mode would have done ("would": deny or pending). Turn it on in production first, read
+ * the journal, then enforce.
  */
 final class Guard
 {
+    public const ENFORCE = 'enforce';
+    public const OBSERVE = 'observe';
+
     /** @var array<string, array{granted: list<Granted>, limits: list<Limit>, rate: ?RateLimit, approval: ?RequiresApproval}> */
     private array $rules = [];
 
@@ -40,21 +51,63 @@ final class Guard
         private readonly ?CacheItemPoolInterface $cache = null,
         private readonly ?EventDispatcherInterface $events = null,
         private readonly int $maxPendingPerUser = 3,
+        private readonly ?LockFactory $locks = null,
+        private readonly string $mode = self::ENFORCE,
+        private readonly ?int $expireAfter = null,
     ) {
+        if (!\in_array($mode, [self::ENFORCE, self::OBSERVE], true)) {
+            throw new \InvalidArgumentException(sprintf('Tool Guard mode must be "%s" or "%s".', self::ENFORCE, self::OBSERVE));
+        }
     }
 
     public function decide(Invocation $call): Decision
     {
         $decision = $this->evaluate($call);
-        $this->journal->record([
+        $would = null;
+        if (self::OBSERVE === $this->mode && !$decision->allowed()) {
+            [$would, $decision] = [$decision, Decision::allow()];
+        } elseif (Decision::PENDING === $decision->verdict) {
+            $decision = $this->hold($call, (string) $decision->reason);
+        }
+        $entry = [
             'event' => 'call', 'channel' => $call->channel, 'tool' => $call->tool, 'user' => $call->user,
-            'arguments' => $call->arguments, 'verdict' => $decision->verdict, 'reason' => $decision->reason, 'approval' => $decision->approvalId,
-        ]);
+            'arguments' => $call->arguments, 'verdict' => $decision->verdict, 'reason' => $would?->reason ?? $decision->reason, 'approval' => $decision->approvalId,
+        ];
+        if (null !== $would) {
+            $entry['would'] = $would->verdict;
+        }
+        $this->journal->record($entry);
         if (Decision::DENY === $decision->verdict) {
             $this->events?->dispatch(new ToolCallRefused($call, (string) $decision->reason));
         }
+        $this->events?->dispatch(new ToolCallDecided($call, $decision, $would));
 
         return $decision;
+    }
+
+    /**
+     * The rules of a tool, in words, in the order they are checked (debug:tool-guard).
+     *
+     * @return list<string>
+     */
+    public function describe(string $class, string $method): array
+    {
+        $r = $this->rules($class, $method);
+        $out = [];
+        foreach ($r['granted'] as $g) {
+            $out[] = sprintf('#[Granted] %s%s', $g->attribute, null === $g->subject ? '' : ' on '.$g->subject);
+        }
+        if (null !== $r['rate']) {
+            $out[] = sprintf('#[RateLimit] %d per %s, per %s', $r['rate']->limit, self::duration($r['rate']->seconds), $r['rate']->per);
+        }
+        foreach ($r['limits'] as $l) {
+            $out[] = sprintf('#[Limit] %s%s ≤ %s, above: %s', null === $l->min ? '' : self::scalar($l->min).' ≤ ', $l->argument, self::scalar($l->max), Limit::DENY === $l->above ? 'refused' : 'held for a human');
+        }
+        if (null !== $r['approval']) {
+            $out[] = '#[RequiresApproval]'.(null === $r['approval']->reason ? '' : ' '.$r['approval']->reason);
+        }
+
+        return $out;
     }
 
     /** Whether the tool has any rule (the integrations skip the journal for unguarded tools). */
@@ -111,19 +164,28 @@ final class Guard
             $hold = $r['approval']->reason ?? sprintf('every "%s" is approved by a human', $call->tool);
         }
         if (null !== $hold) {
-            // an approver is not worn down by a flood of requests: past a few waiting, refused
-            $mine = array_filter($this->approvals->all(Approval::PENDING, 500), static fn (Approval $a) => $a->requestedBy === $call->user);
-            if (\count($mine) >= $this->maxPendingPerUser) {
-                return Decision::deny(sprintf('%d requests already wait for a human', \count($mine)));
-            }
-            $approval = Approval::for($call, $hold);
-            $this->approvals->save($approval);
-            $this->events?->dispatch(new ApprovalRequested($approval));
-
-            return Decision::pending($hold, $approval->id);
+            return Decision::pending($hold, '');
         }
 
         return Decision::allow();
+    }
+
+    /** A held call becomes a request for the approvers — unless this user already has too many waiting. */
+    private function hold(Invocation $call, string $reason): Decision
+    {
+        // an approver is not worn down by a flood of requests: past a few waiting, refused
+        $mine = array_filter(
+            $this->approvals->all(Approval::PENDING, 500),
+            fn (Approval $a) => $a->requestedBy === $call->user && !$a->expired($this->expireAfter),
+        );
+        if (\count($mine) >= $this->maxPendingPerUser) {
+            return Decision::deny(sprintf('%d requests already wait for a human', \count($mine)));
+        }
+        $approval = Approval::for($call, $reason);
+        $this->approvals->save($approval);
+        $this->events?->dispatch(new ApprovalRequested($approval));
+
+        return Decision::pending($reason, $approval->id);
     }
 
     private function withinRate(Invocation $call, RateLimit $rate): bool
@@ -131,15 +193,15 @@ final class Guard
         if (null === $this->cache) {
             return false; // a rate that cannot be counted is not a rate
         }
+        // Symfony RateLimiter: a fixed window per tool and user, counted under a lock when the
+        // app has one, so concurrent calls cannot slip past the limit together
+        $factory = new RateLimiterFactory([
+            'id' => 'tool_guard.'.hash('xxh128', $call->class.'::'.$call->method),
+            'policy' => 'fixed_window', 'limit' => $rate->limit, 'interval' => $rate->seconds.' seconds',
+        ], new CacheStorage($this->cache), $this->locks);
         $who = RateLimit::PER_TOOL === $rate->per ? '*' : ($call->user ?? 'anonymous');
-        $slot = intdiv(time(), $rate->seconds);
-        $item = $this->cache->getItem('tool_guard.'.hash('xxh128', $call->class.'::'.$call->method.'|'.$who.'|'.$slot));
-        $n = ($item->isHit() ? (int) $item->get() : 0) + 1;
-        $item->set($n);
-        $item->expiresAfter($rate->seconds + 60);
-        $this->cache->save($item);
 
-        return $n <= $rate->limit;
+        return $factory->create($who)->consume()->isAccepted();
     }
 
     /** @return array{granted: list<Granted>, limits: list<Limit>, rate: ?RateLimit, approval: ?RequiresApproval} */

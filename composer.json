@@ -19,7 +19,9 @@
         "symfony/config": "^7.3 || ^8.0",
         "symfony/dependency-injection": "^7.3 || ^8.0",
         "symfony/event-dispatcher": "^7.3 || ^8.0",
-        "symfony/http-kernel": "^7.3 || ^8.0"
+        "symfony/http-kernel": "^7.3 || ^8.0",
+        "symfony/lock": "^7.3 || ^8.0",
+        "symfony/rate-limiter": "^7.3 || ^8.0"
     },
     "require-dev": {
         "mcp/sdk": "^0.9",
@@ -36,11 +38,16 @@
         "symfony/dom-crawler": "^7.4",
         "symfony/framework-bundle": "^7.4",
         "symfony/http-client": "^7.4",
+        "symfony/mailer": "^7.4",
         "symfony/mcp-bundle": "^1.0@beta",
         "symfony/notifier": "^7.4",
         "symfony/security-bundle": "^7.4",
+        "symfony/stopwatch": "^7.4",
         "symfony/twig-bundle": "^7.4",
-        "symfony/validator": "^7.4"
+        "symfony/validator": "^7.4",
+        "symfony/web-profiler-bundle": "^7.4",
+        "twig/cssinliner-extra": "^3.26",
+        "twig/inky-extra": "^3.26"
     },
     "suggest": {
         "symfony/ai-bundle": "Guard the tools of Symfony AI agents",

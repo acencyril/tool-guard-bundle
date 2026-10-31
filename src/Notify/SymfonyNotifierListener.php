@@ -34,10 +34,12 @@ final class SymfonyNotifierListener
         $a = $event->approval;
         $args = json_encode($a->arguments, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_PARTIAL_OUTPUT_ON_ERROR);
         $content = sprintf("%s\n%s\nasked by %s · #%s", $a->reason, mb_substr((string) $args, 0, 600), $a->requestedBy ?? 'anonymous', $a->id);
+        $review = null;
         if (null !== $this->approvalsUrl && '' !== $this->approvalsUrl) {
-            $content .= "\nReview: ".$this->approvalsUrl.'#r-'.$a->id;
+            $review = $this->approvalsUrl.'#r-'.$a->id;
+            $content .= "\nReview: ".$review;
         }
-        $notification = (new HeldCallNotification(sprintf('AI action waiting: %s', $a->tool), $this->channels))
+        $notification = (new HeldCallNotification(sprintf('AI action waiting: %s', $a->tool), $this->channels, $review))
             ->content($content)
             ->importance($this->importance)
             ->emoji('🔒');

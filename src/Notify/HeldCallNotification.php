@@ -4,21 +4,43 @@ declare(strict_types=1);
 
 namespace Acencyril\ToolGuardBundle\Notify;
 
+use Symfony\Bridge\Twig\Mime\NotificationEmail;
 use Symfony\Component\Notifier\Message\ChatMessage;
+use Symfony\Component\Notifier\Message\EmailMessage;
 use Symfony\Component\Notifier\Message\SmsMessage;
 use Symfony\Component\Notifier\Notification\ChatNotificationInterface;
+use Symfony\Component\Notifier\Notification\EmailNotificationInterface;
 use Symfony\Component\Notifier\Notification\Notification;
 use Symfony\Component\Notifier\Notification\SmsNotificationInterface;
+use Symfony\Component\Notifier\Recipient\EmailRecipientInterface;
 use Symfony\Component\Notifier\Recipient\RecipientInterface;
 use Symfony\Component\Notifier\Recipient\SmsRecipientInterface;
 
 /**
  * A call waiting for a human. Symfony sends only the subject of a plain notification to chat and
  * SMS channels; this one gives them the reason and the arguments too, so the approver decides from
- * the message itself. Email gets the subject and the content as usual.
+ * the message itself. Email gets Symfony's notification email with a "Review the request" button
+ * to the approvals page — for the approvers who live in their inbox, not in a chat.
  */
-final class HeldCallNotification extends Notification implements ChatNotificationInterface, SmsNotificationInterface
+final class HeldCallNotification extends Notification implements ChatNotificationInterface, SmsNotificationInterface, EmailNotificationInterface
 {
+    /** @param list<string> $channels */
+    public function __construct(string $subject = '', array $channels = [], private readonly ?string $reviewUrl = null)
+    {
+        parent::__construct($subject, $channels);
+    }
+
+    public function asEmailMessage(EmailRecipientInterface $recipient, ?string $transport = null): ?EmailMessage
+    {
+        $message = EmailMessage::fromNotification($this, $recipient);
+        $email = $message->getMessage();
+        if (null !== $this->reviewUrl && $email instanceof NotificationEmail) {
+            $email->action('Review the request', $this->reviewUrl);
+        }
+
+        return $message;
+    }
+
     public function asChatMessage(RecipientInterface $recipient, ?string $transport = null): ?ChatMessage
     {
         return new ChatMessage($this->getEmoji().' '.$this->getSubject()."\n".$this->getContent());

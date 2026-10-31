@@ -6,8 +6,10 @@ namespace Acencyril\ToolGuardBundle\Tests;
 
 use Acencyril\ToolGuardBundle\Tests\App\Kernel;
 use Acencyril\ToolGuardBundle\Tests\App\McpShopTools;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Console\Tester\CommandTester;
 
 /** The whole chain in a Symfony app: an MCP client calls tools over HTTP, a human approves on the page. */
 final class AppTest extends WebTestCase
@@ -63,12 +65,45 @@ final class AppTest extends WebTestCase
         self::assertResponseRedirects();
         self::assertSame(['refund A-1 20.00', 'refund A-1 500.00'], McpShopTools::$ran, 'approved: ran once, as shown');
 
+        // a second click on the same button (a double click, a second tab) runs nothing and says why
+        $client->submit($form, [], self::auth('boss'));
+        $crawler = $client->followRedirect();
+        self::assertStringContainsString('is already approved', $crawler->filter('.notice')->text());
+        self::assertSame(['refund A-1 20.00', 'refund A-1 500.00'], McpShopTools::$ran, 'not twice');
+
         // the journal saw it all, in order, and holds
         $crawler = $client->request('GET', '/admin/ai/approvals', server: self::auth('boss'));
         self::assertResponseIsSuccessful();
         self::assertSame('approved', $crawler->filter('#r-'.$m[1].' .tag')->text());
         self::assertStringContainsString('Refunded 500.00 € on A-1', $crawler->filter('#r-'.$m[1].' pre')->text());
         self::assertSame(['approved', 'pending', 'deny', 'allow'], $crawler->filter('tbody tr td:nth-child(4) span')->each(static fn ($n) => $n->text()), 'newest first; the unguarded ping is not journaled');
+    }
+
+    public function testTheProfilerShowsEveryToolCallOfTheRequestAndItsDecision(): void
+    {
+        $client = static::createClient();
+        $session = $this->initialize($client, 'alice');
+        $client->enableProfiler();
+        $this->call($client, $session, 'alice', 'refund', ['orderId' => 'B-7', 'amount' => 20]);
+        $panel = $client->getProfile()->getCollector('tool_guard');
+        self::assertSame(1, $panel->count('deny'));
+        self::assertSame('refund', $panel->getCalls()[0]['tool']);
+        self::assertSame('mcp', $panel->getCalls()[0]['channel']);
+        self::assertStringContainsString('not granted for orderId "B-7"', $panel->getCalls()[0]['reason']);
+    }
+
+    public function testDebugToolGuardListsTheToolsAndFailsTheBuildOnAnUnguardedOne(): void
+    {
+        $app = new Application(static::bootKernel());
+        $tester = new CommandTester($app->find('debug:tool-guard'));
+        self::assertSame(0, $tester->execute([]));
+        $out = $tester->getDisplay();
+        self::assertStringContainsString('#[Granted] ORDER_VIEW on orderId', $out);
+        self::assertStringContainsString('#[Limit] amount ≤ 50, above: held for a human', $out);
+        self::assertMatchesRegularExpression('/ping\s.*none — the AI calls it freely/', $out);
+
+        self::assertSame(1, $tester->execute(['--fail-on-unguarded' => true]), 'CI: a tool nobody decided rules for');
+        self::assertStringContainsString('1 tool(s) without any rule: ping', $tester->getDisplay());
     }
 
     /** @return array<string, string> */

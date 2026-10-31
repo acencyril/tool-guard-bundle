@@ -27,6 +27,8 @@ use Symfony\Component\DependencyInjection\Reference;
 final class GuardPass implements CompilerPassInterface
 {
     private const ATTRIBUTES = [Granted::class, Limit::class, RateLimit::class, RequiresApproval::class];
+    public const AS_TOOL = 'Symfony\\AI\\Agent\\Toolbox\\Attribute\\AsTool';
+    public const MCP_TOOL = 'Mcp\\Capability\\Attribute\\McpTool';
 
     public function process(ContainerBuilder $container): void
     {
@@ -34,14 +36,21 @@ final class GuardPass implements CompilerPassInterface
             return;
         }
         $tools = [];
+        $all = [];
         foreach ($container->getDefinitions() as $id => $def) {
             $class = $container->getParameterBag()->resolveValue($def->getClass() ?? $id);
-            if (!\is_string($class) || $def->isAbstract() || $def->isSynthetic() || self::skipped($class) || !self::isGuarded($class)) {
+            if (!\is_string($class) || $def->isAbstract() || $def->isSynthetic() || self::skipped($class)) {
                 continue;
             }
-            $tools[$class] = new Reference($id);
+            if (self::isGuarded($class)) {
+                $tools[$class] = new Reference($id);
+                $all[$class] = true;
+            } elseif (self::isTool($class)) {
+                $all[$class] = true;
+            }
         }
         $container->getDefinition(Approver::class)->setArgument('$tools', ServiceLocatorTagPass::register($container, $tools));
+        $container->setParameter('tool_guard.tool_classes', array_keys($all));
 
         if (!class_exists(ReferenceHandler::class)) {
             return;
@@ -115,6 +124,29 @@ final class GuardPass implements CompilerPassInterface
         }
 
         return $guarded;
+    }
+
+    /** A Symfony AI agent tool or an MCP tool, guarded or not (listed by debug:tool-guard). */
+    private static function isTool(string $class): bool
+    {
+        try {
+            if (!class_exists($class)) {
+                return false;
+            }
+            $r = new \ReflectionClass($class);
+        } catch (\Throwable) {
+            return false;
+        }
+        if ([] !== $r->getAttributes(self::AS_TOOL)) {
+            return true;
+        }
+        foreach ($r->getMethods(\ReflectionMethod::IS_PUBLIC) as $m) {
+            if ([] !== $m->getAttributes(self::MCP_TOOL)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

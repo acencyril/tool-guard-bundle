@@ -1,0 +1,62 @@
+{% extends '@WebProfiler/Profiler/layout.html.twig' %}
+
+{% set shield %}<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg>{% endset %}
+
+{% block toolbar %}
+    {% if collector.calls|length > 0 %}
+        {% set refused = collector.count('deny') %}
+        {% set held = collector.count('pending') %}
+        {% set icon %}
+            {{ shield }}
+            <span class="sf-toolbar-value">{{ collector.calls|length }}</span>
+            <span class="sf-toolbar-label">AI tool call{{ collector.calls|length > 1 ? 's' }}</span>
+        {% endset %}
+        {% set text %}
+            <div class="sf-toolbar-info-piece"><b>Allowed</b><span class="sf-toolbar-status sf-toolbar-status-green">{{ collector.count('allow') }}</span></div>
+            <div class="sf-toolbar-info-piece"><b>Held for a human</b><span class="sf-toolbar-status sf-toolbar-status-yellow">{{ held }}</span></div>
+            <div class="sf-toolbar-info-piece"><b>Refused</b><span class="sf-toolbar-status sf-toolbar-status-red">{{ refused }}</span></div>
+        {% endset %}
+        {{ include('@WebProfiler/Profiler/toolbar_item.html.twig', { link: true, status: refused > 0 ? 'red' : (held > 0 ? 'yellow' : '') }) }}
+    {% endif %}
+{% endblock %}
+
+{% block menu %}
+    <span class="label{{ collector.calls is empty ? ' disabled' }}{{ collector.count('deny') > 0 ? ' label-status-error' : (collector.count('pending') > 0 ? ' label-status-warning') }}">
+        <span class="icon">{{ shield }}</span>
+        <strong>Tool Guard</strong>
+        {% if collector.calls is not empty %}<span class="count">{{ collector.calls|length }}</span>{% endif %}
+    </span>
+{% endblock %}
+
+{% block panel %}
+    <h2>Tool Guard</h2>
+    {% if collector.calls is empty %}
+        <div class="empty"><p>No AI tool call in this request.</p></div>
+    {% else %}
+        <div class="metrics">
+            <div class="metric"><span class="value">{{ collector.count('allow') }}</span><span class="label">Allowed</span></div>
+            <div class="metric"><span class="value">{{ collector.count('pending') }}</span><span class="label">Held for a human</span></div>
+            <div class="metric"><span class="value">{{ collector.count('deny') }}</span><span class="label">Refused</span></div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Tool</th><th>Asked by</th><th>Arguments</th><th>Decision</th></tr></thead>
+            <tbody>
+            {% for c in collector.calls %}
+                {% set v = c.would ?? c.verdict %}
+                <tr>
+                    <td class="font-normal text-small text-muted">{{ loop.index }}</td>
+                    <td><strong>{{ c.tool }}</strong><br><span class="text-muted text-small">{{ c.channel }}</span></td>
+                    <td>{{ c.user ?? 'anonymous' }}</td>
+                    <td><pre class="text-small" style="margin:0;white-space:pre-wrap">{{ c.arguments|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre></td>
+                    <td>
+                        <span class="badge badge-{{ v == 'deny' ? 'error' : (v == 'pending' ? 'warning' : 'success') }}">{{ v == 'deny' ? 'refused' : (v == 'pending' ? 'held' : 'allowed') }}</span>
+                        {% if c.would %}<span class="badge">observe mode: it ran</span>{% endif %}
+                        {% if c.reason %}<br>{{ c.reason }}{% endif %}
+                        {% if c.approval %}<br><span class="text-muted">request #{{ c.approval }}</span>{% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

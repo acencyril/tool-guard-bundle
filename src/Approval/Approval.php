@@ -13,6 +13,7 @@ final class Approval
     public const APPROVED = 'approved';
     public const REJECTED = 'rejected';
     public const FAILED = 'failed';
+    public const EXPIRED = 'expired';
 
     /**
      * @param array<string, mixed> $arguments
@@ -41,6 +42,13 @@ final class Approval
             $call->channel, $call->tool, $call->class, $call->method, $call->arguments, $call->user, $reason,
             $now ?? new \DateTimeImmutable(),
         );
+    }
+
+    /** Still pending after $seconds (null: never expires). */
+    public function expired(?int $seconds, ?\DateTimeImmutable $now = null): bool
+    {
+        return self::PENDING === $this->status && null !== $seconds
+            && ($now ?? new \DateTimeImmutable())->getTimestamp() - $this->requestedAt->getTimestamp() >= $seconds;
     }
 
     public function invocation(): Invocation

@@ -37,6 +37,8 @@ final class Kernel extends BaseKernel
             'csrf_protection' => true, 'router' => ['utf8' => true],
             // the approvers' chat: a null transport, so a test can read what was sent
             'notifier' => ['chatter_transports' => ['team' => 'null://null']],
+            // the Tool Guard panel of the profiler (collected on demand by a test)
+            'profiler' => ['enabled' => true, 'collect' => false],
         ]);
         $c->extension('security', [
             'password_hashers' => ['Symfony\Component\Security\Core\User\InMemoryUser' => 'plaintext'],

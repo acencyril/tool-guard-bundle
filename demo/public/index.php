@@ -5,7 +5,9 @@ use ToolGuardDemo\Kernel;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
-$kernel = new Kernel('dev', false);
+// DEMO_PROFILER=1: debug mode with the Symfony profiler and its Tool Guard panel (/_profiler)
+$profiler = '1' === (string) ($_SERVER['DEMO_PROFILER'] ?? getenv('DEMO_PROFILER'));
+$kernel = new Kernel('dev', $profiler);
 $request = Request::createFromGlobals();
 $response = $kernel->handle($request);
 $response->send();

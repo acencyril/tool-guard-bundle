@@ -155,7 +155,18 @@ A held call is stored with its exact arguments. The approvers are told (listen t
 `ApprovalRequested`: Notifier, Slack, a push to a phone), and decide on the approvals page or in
 the console. Approve runs the tool once, with the arguments shown; reject runs nothing.
 
-The approver is never the person in the conversation: asking them would ask the attacker.
+![The approvals page: each held call with the policy's reason and its exact arguments, Approve and run / Reject, and the hash-chained journal below](docs/approvals.png)
+
+The approver is never the person in the conversation: asking them would ask the attacker. And the
+approval itself is guarded:
+
+- **Exactly once.** A request is claimed atomically before the tool runs: two admins told by Slack
+  who click at the same second, or one double click, run the refund once. The second one is told
+  the request is already decided.
+- **It expires.** A request still waiting after `expire_after` (default 24 h) can no longer be
+  approved: a refund asked on Monday is not run on Friday, when nobody remembers the context.
+- **Four eyes** (`four_eyes: true`): nobody approves a call made for themselves — an admin whose
+  own agent was talked into a refund cannot wave it through.
 
 ```yaml
 # config/routes/tool_guard.yaml — under your admin
@@ -192,6 +203,10 @@ tool_guard:
 
 `composer require symfony/notifier` and the bridge of your channel (`symfony/slack-notifier`…). A failed
 notification never blocks the guard: the request still waits on the page.
+
+On the `email` channel, the approver gets Symfony's notification email with a **Review the request**
+button to that exact request on the page (it needs `symfony/mailer` and `twig/cssinliner-extra`
+`twig/inky-extra`, like any Notifier email) — for approvers who live in their inbox, not in a chat.
 
 ### On your phone
 
@@ -275,6 +290,48 @@ OPENROUTER_API_KEY=… php demo/bin/console demo:attack-real-model --model=opena
 The same tools, with the same attributes, serve both paths: `#[McpTool]` for the MCP server,
 `#[AsTool]` for the agent (`demo/src/ShopTools.php`).
 
+## Every tool, its rules, and the ones without: `debug:tool-guard`
+
+Like `debug:router`, for what an AI may call:
+
+```
+$ php bin/console debug:tool-guard
+  tool               for          method                         rules, in the order they are checked
+  export_customers   agent, mcp   ShopTools::exportCustomers()   #[Granted] ROLE_ADMIN
+  refund             agent, mcp   ShopTools::refund()            #[Granted] ORDER_OWNER on orderId
+                                                                 #[RateLimit] 3 per 1 hour(s), per user
+                                                                 #[Limit] 0.01 ≤ amount ≤ 50, above: held for a human
+                                                                 #[Limit] amount ≤ 1000, above: refused
+  …
+ [OK] 4 tool(s), every one with at least one rule.
+```
+
+`--fail-on-unguarded` makes it a CI step: a new `#[AsTool]` or `#[McpTool]` cannot reach production
+without someone deciding its rules (`#[Granted('PUBLIC_ACCESS')]` says a tool is meant to be open).
+
+## In the Symfony profiler
+
+In debug mode, a **Tool Guard** panel lists every tool call of the request: who asked, the exact
+arguments, allowed, held (with the request id) or refused, and why. The toolbar turns yellow on a
+held call, red on a refused one.
+
+![The Tool Guard panel of the Symfony profiler on an MCP request: refund by alice, amount 500, held for a human because it is above the limit of 50](docs/profiler-held.png)
+
+`DEMO_PROFILER=1 php -S 127.0.0.1:8000 -t demo/public`, run the attack, then open `/_profiler`.
+
+## Observe first, then enforce
+
+Adding guardrails to an app already in production is scary: what if a rule blocks real customers?
+
+```yaml
+tool_guard:
+    mode: observe
+```
+
+Nothing is blocked: every call runs, and the journal (and the profiler, and the approvals page)
+records what Tool Guard *would* have refused or held, and why. Read it for a week, adjust the
+rules, then switch to `enforce` (the default).
+
 ## Testing your rules
 
 `ToolGuardAssertions` is a trait for your `KernelTestCase` or `WebTestCase` (with
@@ -302,8 +359,12 @@ tool_guard:
     approvals_dir: '%kernel.project_dir%/var/tool_guard/approvals'
     journal: '%kernel.project_dir%/var/tool_guard/journal.jsonl'
     approver_role: ROLE_ADMIN
-    cache: cache.app          # counts #[RateLimit]
+    cache: cache.app          # where #[RateLimit] counts (Symfony RateLimiter, fixed window)
+    lock_factory: lock.factory  # counts atomically under concurrent calls (ignored if absent)
     max_pending_per_user: 3   # requests one user may have waiting for a human; more are refused
+    expire_after: 86400       # seconds a request may wait before it can no longer be approved (0: never)
+    four_eyes: false          # true: nobody approves a call made for themselves
+    mode: enforce             # observe: block nothing, journal what would have been blocked
 ```
 
 A flood of risky calls never floods the approver: a user has at most `max_pending_per_user` requests

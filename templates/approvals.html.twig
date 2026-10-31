@@ -13,14 +13,17 @@ h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 10px}.sub{color
 pre{background:var(--bg);border-radius:8px;padding:10px;overflow:auto;font-size:13px;margin:10px 0}
 .acts{display:flex;gap:8px;flex-wrap:wrap}.acts form{margin:0}button{font:inherit;font-weight:700;padding:9px 16px;border-radius:9px;border:1px solid var(--line);cursor:pointer;background:var(--card);color:var(--fg)}
 button.ok{background:var(--ok);border-color:var(--ok);color:#fff}button.no{color:var(--bad);border-color:var(--bad)}
-.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 8px}.approved{color:var(--ok)}.rejected,.failed,.deny{color:var(--bad)}.pending{color:var(--warn)}
+.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 8px}.approved,.allow{color:var(--ok)}.rejected,.failed,.deny{color:var(--bad)}.pending{color:var(--warn)}.expired{color:var(--muted)}
+.notice{border-left:4px solid var(--warn)}.observe{border-left:4px solid var(--ok)}.would{color:var(--warn);font-size:12px;font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}
 @media (max-width:600px){table,tbody,tr,td{display:block}th{display:none}td{border:0;padding:2px 0}tr{border-bottom:1px solid var(--line);padding:6px 0}}
 </style>
 </head>
 <body><main>
 <h1>AI actions waiting for a human</h1>
-<p class="sub">An AI asked for these. They have not run. Read the arguments: approving runs the action exactly as shown.</p>
+<p class="sub">An AI asked for these. They have not run. Read the arguments: approving runs the action exactly as shown.{% if expire_after %} A request expires after {{ expire_after >= 3600 ? (expire_after / 3600)|round(1, 'floor') ~ ' h' : (expire_after / 60)|round ~ ' min' }}.{% endif %}</p>
+{% if mode == 'observe' %}<p class="card observe"><strong>Observe mode.</strong> Nothing is blocked: every call runs, and the journal shows what Tool Guard would have refused or held. Set <code>tool_guard.mode: enforce</code> when the rules look right.</p>{% endif %}
+{% for message in app.flashes('tool_guard') %}<p class="card notice">{{ message }}</p>{% endfor %}
 {% for a in pending %}
 <div class="card" id="r-{{ a.id }}">
 <div><span class="tool">{{ a.tool }}</span> <span class="meta">· {{ a.channel }} · asked by {{ a.requestedBy ?? 'anonymous' }} · {{ a.requestedAt|date('Y-m-d H:i') }} · #{{ a.id }}</span></div>
@@ -50,7 +53,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 {% set outcome = e.verdict ?? e.status ?? '' %}
 <tr><td>{{ e.at|date('m-d H:i:s') }}</td><td>{{ e.user ?? e.by ?? '—' }}</td>
 <td>{{ e.tool ?? '' }}{% if (e.event ?? '') == 'call' %} <span class="meta">({{ e.channel ?? '' }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}</td>
-<td><span class="{{ outcome }}">{{ outcome }}</span>{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
+<td><span class="{{ outcome }}">{{ outcome }}</span>{% if e.would ?? null %} <span class="would">would be {{ e.would == 'deny' ? 'refused' : 'held' }}</span>{% endif %}{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
 {% endfor %}
 </tbody></table>
 </main></body></html>

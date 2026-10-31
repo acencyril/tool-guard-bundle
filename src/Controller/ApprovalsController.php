@@ -36,6 +36,8 @@ final class ApprovalsController
         private readonly ?CsrfTokenManagerInterface $csrf,
         private readonly UrlGeneratorInterface $urls,
         private readonly string $role,
+        private readonly string $mode = 'enforce',
+        private readonly ?int $expireAfter = null,
     ) {
     }
 
@@ -47,6 +49,8 @@ final class ApprovalsController
             'pending' => $this->store->all('pending'),
             'decided' => array_values(array_filter($this->store->all(null, 30), static fn ($a) => 'pending' !== $a->status)),
             'journal' => $this->journal->latest(30),
+            'mode' => $this->mode,
+            'expire_after' => $this->expireAfter,
         ])));
     }
 
@@ -60,8 +64,12 @@ final class ApprovalsController
             'approve' === $decision ? $this->approver->approve($id, $this->user->identifier()) : $this->approver->reject($id, $this->user->identifier());
         } catch (\InvalidArgumentException) {
             throw new NotFoundHttpException();
-        } catch (\LogicException) {
-            // already decided (two approvers, a double click): the page shows the outcome
+        } catch (\LogicException $e) {
+            // already decided or being decided (two approvers, a double click), expired, or the
+            // approver's own request: nothing ran, the page says why
+            if ($request->hasSession()) {
+                $request->getSession()->getFlashBag()->add('tool_guard', $e->getMessage());
+            }
         }
 
         return $this->private(new RedirectResponse($this->urls->generate('tool_guard_approvals').'#r-'.$id, 303));

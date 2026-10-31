@@ -9,6 +9,7 @@ use Acencyril\ToolGuardBundle\Approval\Approver;
 use Acencyril\ToolGuardBundle\Approval\FilesystemApprovalStore;
 use Acencyril\ToolGuardBundle\Decision;
 use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
+use Acencyril\ToolGuardBundle\Event\ToolCallDecided;
 use Acencyril\ToolGuardBundle\Guard;
 use Acencyril\ToolGuardBundle\Invocation;
 use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
@@ -162,5 +163,102 @@ final class GuardTest extends TestCase
         $this->call('order', ['orderId' => 'A-1']);
         self::assertNull($this->journal->verify());
         self::assertFalse($this->journal->contains($head));
+    }
+
+    private function approver(ShopTools $tools, ?int $expireAfter = null, bool $fourEyes = false): Approver
+    {
+        return new Approver($this->store, new ServiceLocator([ShopTools::class => static fn () => $tools]), $this->journal, null, $expireAfter, $fourEyes);
+    }
+
+    public function testTwoApproversAtOnceRunTheRefundOnce(): void
+    {
+        $tools = new ShopTools();
+        $held = $this->call('refund', ['orderId' => 'A-1', 'amount' => 500]);
+        $id = (string) $held->approvalId;
+        // a second approver (another tab, another admin told by Slack) loaded the same pending request
+        // and clicked first: its claim is in the store, the decision is not written yet
+        self::assertTrue($this->store->claim($id));
+        try {
+            $this->approver($tools)->approve($id, 'second-admin');
+            self::fail('approved while another decision held it');
+        } catch (\LogicException $e) {
+            self::assertStringContainsString('already being decided', $e->getMessage());
+        }
+        self::assertSame([], $tools->done, 'the refund did not run a second time');
+        self::assertFalse($this->store->claim($id), 'a claim is given once');
+    }
+
+    public function testAnOldRequestExpiresInsteadOfRunning(): void
+    {
+        $tools = new ShopTools();
+        $old = Approval::for(new Invocation('agent', 'refund', ShopTools::class, 'refund', ['orderId' => 'A-1', 'amount' => 500], 'alice'), 'amount 500 is above the limit of 50', new \DateTimeImmutable('-2 days'));
+        $this->store->save($old);
+        try {
+            $this->approver($tools, 86400)->approve($old->id, 'manager');
+            self::fail('a two-day-old request was approved');
+        } catch (\LogicException $e) {
+            self::assertStringContainsString('expired', $e->getMessage());
+        }
+        self::assertSame(Approval::EXPIRED, $this->store->get($old->id)?->status);
+        self::assertSame([], $tools->done);
+        self::assertSame('expired', $this->journal->latest(1)[0]['status']);
+
+        // an expired request no longer counts against the user's waiting requests
+        $guard = new Guard($this->store, $this->journal, new Auth(), new ArrayAdapter(), null, 1, null, Guard::ENFORCE, 86400);
+        $stale = Approval::for(new Invocation('agent', 'newsletter', ShopTools::class, 'newsletter', ['subject' => 'old'], 'alice'), 'r', new \DateTimeImmutable('-3 days'));
+        $this->store->save($stale);
+        self::assertSame(Decision::PENDING, $guard->decide(new Invocation('agent', 'newsletter', ShopTools::class, 'newsletter', ['subject' => 'new'], 'alice'))->verdict);
+    }
+
+    public function testFourEyesNobodyApprovesTheirOwnRequest(): void
+    {
+        $tools = new ShopTools();
+        $held = $this->call('refund', ['orderId' => 'A-1', 'amount' => 500], 'boss');
+        $approver = $this->approver($tools, null, true);
+        try {
+            $approver->approve((string) $held->approvalId, 'boss');
+            self::fail('the requester approved his own refund');
+        } catch (\LogicException $e) {
+            self::assertStringContainsString('another approver', $e->getMessage());
+        }
+        self::assertSame([], $tools->done);
+        self::assertSame(Approval::APPROVED, $approver->approve((string) $held->approvalId, 'manager')->status, 'someone else can');
+    }
+
+    public function testObserveModeBlocksNothingAndJournalsWhatItWouldHaveDone(): void
+    {
+        $decided = [];
+        $this->events->addListener(ToolCallDecided::class, function (ToolCallDecided $e) use (&$decided) { $decided[] = $e; });
+        $guard = new Guard($this->store, $this->journal, new Auth(), new ArrayAdapter(), $this->events, 3, null, Guard::OBSERVE);
+        $call = fn (string $m, array $a) => $guard->decide(new Invocation('agent', $m, ShopTools::class, $m, $a, 'alice'));
+
+        self::assertTrue($call('order', ['orderId' => 'B-7'])->allowed());
+        self::assertTrue($call('refund', ['orderId' => 'A-1', 'amount' => 500])->allowed());
+        self::assertSame([], $this->store->all(), 'no request is created in observe mode');
+        $latest = $this->journal->latest();
+        self::assertSame(['pending', 'deny'], array_column($latest, 'would'));
+        self::assertSame(['allow', 'allow'], array_column($latest, 'verdict'));
+        self::assertSame('amount 500 is above the limit of 50', $latest[0]['reason']);
+        self::assertSame(Decision::DENY, $decided[0]->wouldHave?->verdict);
+
+        $this->expectException(\InvalidArgumentException::class);
+        new Guard($this->store, $this->journal, mode: 'audit');
+    }
+
+    public function testEveryDecisionIsAnEventAndTheRulesReadInWords(): void
+    {
+        $decided = [];
+        $this->events->addListener(ToolCallDecided::class, function (ToolCallDecided $e) use (&$decided) { $decided[] = $e->decision->verdict; });
+        $this->call('order', ['orderId' => 'A-1']);
+        $this->call('order', ['orderId' => 'B-7']);
+        $this->call('refund', ['orderId' => 'A-1', 'amount' => 500]);
+        self::assertSame(['allow', 'deny', 'pending'], $decided);
+        self::assertSame([
+            '#[Granted] ORDER_VIEW on orderId',
+            '#[RateLimit] 3 per 1 hour(s), per user',
+            '#[Limit] amount ≤ 50, above: held for a human',
+            '#[Limit] amount ≤ 1000, above: refused',
+        ], $this->guard->describe(ShopTools::class, 'refund'));
+        self::assertSame([], $this->guard->describe(ShopTools::class, 'weather'));
     }
 }
