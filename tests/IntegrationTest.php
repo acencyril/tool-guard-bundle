@@ -7,6 +7,9 @@ namespace Acencyril\ToolGuardBundle\Tests;
 use Acencyril\ToolGuardBundle\Approval\FilesystemApprovalStore;
 use Acencyril\ToolGuardBundle\CurrentUser;
 use Acencyril\ToolGuardBundle\Guard;
+use Acencyril\ToolGuardBundle\GuardedInvoker;
+use Acencyril\ToolGuardBundle\ToolCallBlocked;
+use Acencyril\ToolGuardBundle\Approval\Approval;
 use Acencyril\ToolGuardBundle\Integration\Agent\GuardToolCalls;
 use Acencyril\ToolGuardBundle\Integration\Mcp\GuardedReferenceHandler;
 use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
@@ -76,5 +79,54 @@ final class IntegrationTest extends TestCase
         self::assertStringContainsString('not granted for orderId "B-7"', $refused->content[0]->text);
 
         self::assertSame(['refund A-1 20.00'], $tools->done);
+    }
+
+    public function testAWorkflowChainingToolboxCallsIsGuardedAtEveryStep(): void
+    {
+        // what an agent that writes code does: one script, several tool calls, results passed along
+        $tools = new ShopTools();
+        $events = new EventDispatcher();
+        $events->addListener(ToolCallRequested::class, new GuardToolCalls($this->guard, new CurrentUser()));
+        $toolbox = new Toolbox([$tools], eventDispatcher: $events);
+
+        $results = [];
+        foreach ([['A-1', 20], ['A-1', 30], ['B-7', 10], ['A-1', 400]] as $i => [$order, $amount]) {
+            $results[] = $toolbox->execute(new ToolCall((string) $i, 'refund', ['orderId' => $order, 'amount' => $amount]))->getResult();
+        }
+        self::assertSame(['refund A-1 20.00', 'refund A-1 30.00'], $tools->done, 'the other order and the large refund never ran, mid-workflow');
+        self::assertStringStartsWith('Refused by policy', $results[2]);
+        self::assertStringContainsString('needs a human approval', $results[3]);
+    }
+
+    public function testYourOwnExecutionLayerGoesThroughTheGuardedInvoker(): void
+    {
+        $tools = new ShopTools();
+        $store = new FilesystemApprovalStore($this->dir.'/a');
+        $invoker = new GuardedInvoker($this->guard, new CurrentUser(), new ServiceLocator([ShopTools::class => static fn () => $tools]));
+
+        self::assertSame('Refunded 20.00 € on A-1', $invoker->call(ShopTools::class, 'refund', ['orderId' => 'A-1', 'amount' => 20]));
+
+        try {
+            $invoker->call(ShopTools::class, 'refund', ['orderId' => 'B-7', 'amount' => 20]);
+            self::fail('a refused call ran');
+        } catch (ToolCallBlocked $e) {
+            self::assertFalse($e->held());
+            self::assertStringContainsString('not granted for orderId "B-7"', $e->getMessage());
+        }
+
+        try {
+            $invoker->call($tools, 'refund', ['orderId' => 'A-1', 'amount' => 500]);
+            self::fail('a held call ran');
+        } catch (ToolCallBlocked $e) {
+            self::assertTrue($e->held());
+            self::assertSame(Approval::PENDING, $store->get((string) $e->decision->approvalId)?->status, 'waiting for a human, like any held call');
+            self::assertSame('code', $store->get((string) $e->decision->approvalId)?->channel);
+        }
+
+        self::assertSame('sunny', $invoker->call($tools, 'weather', []), 'unguarded tools run as before');
+        self::assertSame(['refund A-1 20.00'], $tools->done);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $invoker->call(\stdClass::class, 'x', []);
     }
 }

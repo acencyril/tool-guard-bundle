@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Acencyril\ToolGuardBundle\Approval;
 
+use Acencyril\ToolGuardBundle\Call;
 use Acencyril\ToolGuardBundle\Event\ApprovalDecided;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Psr\Container\ContainerInterface;
@@ -103,22 +104,8 @@ final class Approver
         if (!$this->tools->has($a->class)) {
             throw new \RuntimeException(sprintf('Tool service "%s" not found.', $a->class));
         }
-        $service = $this->tools->get($a->class);
-        $m = new \ReflectionMethod($service, $a->method);
-        $args = [];
-        foreach ($m->getParameters() as $p) {
-            if (\array_key_exists($p->getName(), $a->arguments)) {
-                $args[] = $a->arguments[$p->getName()];
-            } elseif ($p->isDefaultValueAvailable()) {
-                $args[] = $p->getDefaultValue();
-            } elseif ($p->allowsNull()) {
-                $args[] = null;
-            } else {
-                throw new \RuntimeException(sprintf('Argument "%s" missing.', $p->getName()));
-            }
-        }
 
-        return $m->invokeArgs($service, $args);
+        return Call::invoke($this->tools->get($a->class), $a->method, $a->arguments);
     }
 
     private static function text(mixed $result): string

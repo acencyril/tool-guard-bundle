@@ -11,6 +11,7 @@ use Acencyril\ToolGuardBundle\Attribute\RateLimit;
 use Acencyril\ToolGuardBundle\Attribute\RequiresApproval;
 use Acencyril\ToolGuardBundle\CurrentUser;
 use Acencyril\ToolGuardBundle\Guard;
+use Acencyril\ToolGuardBundle\GuardedInvoker;
 use Acencyril\ToolGuardBundle\Integration\Mcp\GuardedReferenceHandler;
 use Mcp\Capability\Registry\ReferenceHandler;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
@@ -49,7 +50,9 @@ final class GuardPass implements CompilerPassInterface
                 $all[$class] = true;
             }
         }
-        $container->getDefinition(Approver::class)->setArgument('$tools', ServiceLocatorTagPass::register($container, $tools));
+        $locator = ServiceLocatorTagPass::register($container, $tools);
+        $container->getDefinition(Approver::class)->setArgument('$tools', $locator);
+        $container->hasDefinition(GuardedInvoker::class) && $container->getDefinition(GuardedInvoker::class)->setArgument('$tools', $locator);
         $container->setParameter('tool_guard.tool_classes', array_keys($all));
 
         if (!class_exists(ReferenceHandler::class)) {

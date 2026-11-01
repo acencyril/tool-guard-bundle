@@ -149,4 +149,17 @@ final class AppTest extends WebTestCase
 
         return (array) json_decode($raw, true);
     }
+
+    public function testTheInvokerIsWiredWithEveryGuardedToolOfTheApp(): void
+    {
+        self::bootKernel();
+        $invoker = static::getContainer()->get(\Acencyril\ToolGuardBundle\GuardedInvoker::class);
+        try {
+            $invoker->call(McpShopTools::class, 'refund', ['orderId' => 'A-1', 'amount' => 20]);
+            self::fail('no user signed in: the voter cannot grant it');
+        } catch (\Acencyril\ToolGuardBundle\ToolCallBlocked $e) {
+            self::assertStringContainsString('not granted', $e->getMessage());
+        }
+        self::assertSame([], McpShopTools::$ran, 'fails closed outside a request too');
+    }
 }

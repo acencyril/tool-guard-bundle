@@ -56,12 +56,12 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 vendor/bin/phpunit
 ```
 
-36 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
+39 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
 `tests/Demo/DemoRulesTest.php` (the nine attacks, and the tricks a reviewer tries: the amount left
 out, text for a number, a negative refund, infinity, someone else's order) and
 `tests/IntegrationTest.php` (a Symfony AI toolbox and an MCP server never run a refused or held call),
 `tests/GuardTest.php` (two approvers at once run a refund once; an old request expires; four eyes;
-observe mode). `php demo/bin/console debug:tool-guard` lists every tool and its rules;
+observe mode), `tests/IntegrationTest.php` (a workflow chaining tool calls is guarded at every step; `GuardedInvoker` for any other execution layer). `php demo/bin/console debug:tool-guard` lists every tool and its rules;
 `DEMO_PROFILER=1` adds the Tool Guard panel of the Symfony profiler to the demo.
 
 ## 6. What Symfony AI and MCP made possible, and what broke

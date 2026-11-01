@@ -9,6 +9,7 @@ final class Invocation
 {
     public const AGENT = 'agent';
     public const MCP = 'mcp';
+    public const CODE = 'code';
 
     /**
      * @param class-string         $class

@@ -89,6 +89,7 @@ final class ToolGuardBundle extends AbstractBundle
             service('security.authorization_checker')->nullOnInvalid(), service($config['cache'])->nullOnInvalid(), service('event_dispatcher')->nullOnInvalid(), $config['max_pending_per_user'],
             service($config['lock_factory'])->nullOnInvalid(), $config['mode'], $expire,
         ]);
+        $s->set(GuardedInvoker::class)->args([service(Guard::class), service(CurrentUser::class), service_locator([])])->public();
         $s->set(Approver::class)->args([service(ApprovalStore::class), service_locator([]), service(Journal::class), service('event_dispatcher')->nullOnInvalid(), $expire, $config['four_eyes']]);
         if ($builder->getParameter('kernel.debug')) {
             $s->set(ToolGuardDataCollector::class)

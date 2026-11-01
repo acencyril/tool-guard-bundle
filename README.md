@@ -292,6 +292,28 @@ OPENROUTER_API_KEY=… php demo/bin/console demo:attack-real-model --model=opena
 The same tools, with the same attributes, serve both paths: `#[McpTool]` for the MCP server,
 `#[AsTool]` for the agent (`demo/src/ShopTools.php`).
 
+## Whatever path the call takes
+
+The rules sit on the tool's method, so they hold however the tool is reached:
+
+- **a Symfony AI agent**: every call the toolbox runs passes the guard (`ToolCallRequested`), including a
+  script or workflow that chains several tool calls and passes results along, at every step;
+- **an MCP client**: every server built with symfony/mcp-bundle or the PHP MCP SDK has its handler guarded;
+- **anything else** (your own execution layer, a workflow engine, a message handler, code an agent wrote):
+  call the tool through `GuardedInvoker`, and the same attributes apply.
+
+```php
+public function __construct(private GuardedInvoker $tools) {}
+
+try {
+    $result = $this->tools->call(ShopTools::class, 'refund', ['orderId' => 'A-1', 'amount' => 500]);
+} catch (ToolCallBlocked $e) {
+    // nothing ran; $e->held(): it waits on the approvals page; $e->getMessage(): the text for a model
+}
+```
+
+A step that is refused or held stops the workflow there: it never goes on as if the step had run.
+
 ## Every tool, its rules, and the ones without: `debug:tool-guard`
 
 Like `debug:router`, for what an AI may call:
