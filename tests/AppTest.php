@@ -76,7 +76,9 @@ final class AppTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertSame('approved', $crawler->filter('#r-'.$m[1].' .tag')->text());
         self::assertStringContainsString('Refunded 500.00 € on A-1', $crawler->filter('#r-'.$m[1].' pre')->text());
-        self::assertSame(['approved', 'pending', 'deny', 'allow'], $crawler->filter('tbody tr td:nth-child(4) span')->each(static fn ($n) => $n->text()), 'newest first; the unguarded ping is not journaled');
+        self::assertSame(['approved', 'allow', 'pending', 'deny', 'allow'], $crawler->filter('tbody tr td:nth-child(4) span')->each(static fn ($n) => $n->text()), 'newest first; with agents declared, the ping is checked against the agent\'s role too');
+        self::assertStringContainsString('alice via support', $crawler->filter('tbody tr')->eq(1)->text(), 'the journal says which agent asked');
+        self::assertStringContainsString('asked by alice via support', $crawler->filter('#r-'.$m[1])->text());
     }
 
     public function testTheProfilerShowsEveryToolCallOfTheRequestAndItsDecision(): void
@@ -100,10 +102,15 @@ final class AppTest extends WebTestCase
         $out = $tester->getDisplay();
         self::assertStringContainsString('#[Granted] ORDER_VIEW on orderId', $out);
         self::assertStringContainsString('#[Limit] amount ≤ 50, above: held for a human', $out);
-        self::assertMatchesRegularExpression('/ping\s.*none — the AI calls it freely/', $out);
+        self::assertMatchesRegularExpression('/ping\s.*only the agents\' roles\s+support/', $out, 'agents declared: which agents may call each tool');
+        self::assertSame(0, $tester->execute(['--fail-on-unguarded' => true]), 'the agents\' roles cover the ping');
 
+        // without agents, a tool with no rule fails the build
+        $guard = new \Acencyril\ToolGuardBundle\Guard(new \Acencyril\ToolGuardBundle\Approval\FilesystemApprovalStore(sys_get_temp_dir().'/tg-x'), new \Acencyril\ToolGuardBundle\Journal\JsonlJournal(sys_get_temp_dir().'/tg-x.jsonl'));
+        $tester = new CommandTester(new \Acencyril\ToolGuardBundle\Command\RulesCommand($guard, [McpShopTools::class]));
         self::assertSame(1, $tester->execute(['--fail-on-unguarded' => true]), 'CI: a tool nobody decided rules for');
         self::assertStringContainsString('1 tool(s) without any rule: ping', $tester->getDisplay());
+        self::assertMatchesRegularExpression('/ping\s.*none — the AI calls it freely/', $tester->getDisplay());
     }
 
     /** @return array<string, string> */

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Acencyril\ToolGuardBundle\Test;
 
 use PHPUnit\Framework\Assert;
+use Acencyril\ToolGuardBundle\Integration\Agent\AgentScope;
 use Symfony\AI\Agent\Toolbox\Toolbox;
 use Symfony\AI\Platform\Result\ToolCall;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -40,6 +41,7 @@ trait ToolGuardAssertions
     private ?string $toolGuardSession = null;
     private ?UserInterface $toolGuardUser = null;
     private int $toolGuardRpcId = 0;
+    private ?string $toolGuardAgent = null;
 
     /** The path of your MCP server's route (symfony/mcp-bundle's default is /_mcp). */
     protected function mcpPath(): string
@@ -109,13 +111,25 @@ trait ToolGuardAssertions
      * Calls a tool through a Symfony AI toolbox, as an agent would, with the application's event
      * dispatcher (where Tool Guard listens). $tools: the service holding the #[AsTool] methods.
      */
+    /** The next agent-side calls (agentTools:) come from this agent (tool_guard.agents); null: from no agent. */
+    protected function throughAgent(?string $agent): void
+    {
+        $this->toolGuardAgent = $agent;
+    }
+
     protected function callAgentTool(object $tools, string $tool, array $arguments = []): ToolCallOutcome
     {
         $c = static::getContainer();
         if (null !== $this->toolGuardUser) {
             $c->get('security.token_storage')->setToken(new UsernamePasswordToken($this->toolGuardUser, $this->mcpFirewall(), $this->toolGuardUser->getRoles()));
         }
-        $result = (new Toolbox([$tools], eventDispatcher: $c->get('event_dispatcher')))->execute(new ToolCall('test_'.++$this->toolGuardRpcId, $tool, $arguments))->getResult();
+        $scope = null !== $this->toolGuardAgent && $c->has(AgentScope::class) ? $c->get(AgentScope::class) : null;
+        $scope?->enter($this->toolGuardAgent);
+        try {
+            $result = (new Toolbox([$tools], eventDispatcher: $c->get('event_dispatcher')))->execute(new ToolCall('test_'.++$this->toolGuardRpcId, $tool, $arguments))->getResult();
+        } finally {
+            $scope?->leave();
+        }
         $text = \is_string($result) ? $result : (string) json_encode($result, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
 
         return ToolCallOutcome::fromText($tool, $text, false);

@@ -29,7 +29,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 {% for message in app.flashes('tool_guard') %}<p class="card notice">{{ message }}</p>{% endfor %}
 {% for a in pending %}
 <div class="card" id="r-{{ a.id }}">
-<div><span class="tool">{{ a.tool }}</span> <span class="meta">· {{ a.channel }} · asked by {{ a.requestedBy ?? 'anonymous' }} · {{ a.requestedAt|date('Y-m-d H:i') }} · #{{ a.id }}</span></div>
+<div><span class="tool">{{ a.tool }}</span> <span class="meta">· {{ a.channel }} · asked by {{ a.requestedBy ?? 'anonymous' }}{% if a.agent %} via {{ a.agent }}{% endif %} · {{ a.requestedAt|date('Y-m-d H:i') }} · #{{ a.id }}</span></div>
 <div class="why">{{ a.reason }}</div>
 <pre>{{ a.arguments|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>
 <div class="acts">
@@ -45,7 +45,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <h2>Decided</h2>
 {% for a in decided %}
 <div class="card" id="r-{{ a.id }}"><span class="tool">{{ a.tool }}</span> <span class="tag {{ a.status }}">{{ a.status }}</span>
-<span class="meta">by {{ a.decidedBy ?? '—' }} · {{ a.decidedAt ? a.decidedAt|date('Y-m-d H:i') : '' }} · asked by {{ a.requestedBy ?? 'anonymous' }} · #{{ a.id }}</span>
+<span class="meta">by {{ a.decidedBy ?? '—' }} · {{ a.decidedAt ? a.decidedAt|date('Y-m-d H:i') : '' }} · asked by {{ a.requestedBy ?? 'anonymous' }}{% if a.agent %} via {{ a.agent }}{% endif %} · #{{ a.id }}</span>
 {% if a.result %}<pre>{{ a.result }}</pre>{% endif %}</div>
 {% endfor %}
 {% endif %}
@@ -54,7 +54,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Outcome</th></tr></thead><tbody>
 {% for e in journal %}
 {% set outcome = e.verdict ?? e.status ?? '' %}
-<tr><td>{{ e.at|date('m-d H:i:s') }}</td><td>{{ e.user ?? e.by ?? '—' }}</td>
+<tr><td>{{ e.at|date('m-d H:i:s') }}</td><td>{{ e.user ?? e.by ?? '—' }}{% if e.agent ?? null %} <span class="meta">via {{ e.agent }}</span>{% endif %}</td>
 <td>{{ e.tool ?? '' }}{% if (e.event ?? '') == 'call' %} <span class="meta">({{ e.channel ?? '' }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}</td>
 <td><span class="{{ outcome }}">{{ outcome }}</span>{% if e.would ?? null %} <span class="would">would be {{ e.would == 'deny' ? 'refused' : 'held' }}</span>{% endif %}{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
 {% endfor %}

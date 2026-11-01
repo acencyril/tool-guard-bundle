@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Acencyril\ToolGuardBundle;
 
-/** One tool call an AI asked for: where it came from, which method, with what, for whom. */
+/** One tool call an AI asked for: where it came from, which method, with what, for whom, through which agent. */
 final class Invocation
 {
     public const AGENT = 'agent';
@@ -22,6 +22,7 @@ final class Invocation
         public readonly string $method,
         public readonly array $arguments,
         public readonly ?string $user = null,
+        public readonly ?string $agent = null,
     ) {
     }
 }

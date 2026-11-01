@@ -53,6 +53,8 @@ final class Kernel extends BaseKernel
         $c->extension('tool_guard', [
             'approvals_dir' => '%kernel.project_dir%/approvals', 'journal' => '%kernel.project_dir%/journal.jsonl',
             'notifier' => ['channels' => ['chat/team'], 'approvals_url' => 'https://shop.test/admin/ai/approvals'],
+            // the shop's MCP server speaks for the support agent, which may refund and ping, nothing else
+            'agents' => ['support' => ['tools' => ['refund', 'ping'], 'mcp_servers' => ['shop']], 'marketing' => ['tools' => ['newsletter']]],
         ]);
         $s = $c->services()->defaults()->autowire()->autoconfigure();
         // the expected 403 of a test would otherwise be logged to the console as an "[error]"

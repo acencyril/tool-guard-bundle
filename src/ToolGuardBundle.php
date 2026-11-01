@@ -13,6 +13,7 @@ use Acencyril\ToolGuardBundle\Controller\ApprovalsController;
 use Acencyril\ToolGuardBundle\DependencyInjection\GuardPass;
 use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
 use Acencyril\ToolGuardBundle\Event\ToolCallDecided;
+use Acencyril\ToolGuardBundle\Integration\Agent\AgentScope;
 use Acencyril\ToolGuardBundle\Integration\Agent\GuardToolCalls;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
@@ -66,15 +67,36 @@ final class ToolGuardBundle extends AbstractBundle
                 ->booleanNode('four_eyes')->defaultFalse()->info('Nobody approves a call made for themselves')->end()
                 ->enumNode('mode')->values([Guard::ENFORCE, Guard::OBSERVE])->defaultValue(Guard::ENFORCE)->info('observe: nothing is blocked, the journal records what would have been')->end()
                 ->scalarNode('lock_factory')->defaultValue('lock.factory')->info('Symfony Lock factory counting #[RateLimit] atomically (ignored if absent)')->end()
+                ->arrayNode('agents')->info('Each agent\'s own role: the tools it may call. A call runs only if the user AND the agent may make it.')
+                    ->useAttributeAsKey('name')
+                    ->arrayPrototype()
+                        ->children()
+                            ->arrayNode('tools')->scalarPrototype()->end()->info('Tool names as the model sees them; "*" for every tool')->end()
+                            ->arrayNode('mcp_servers')->scalarPrototype()->end()->info('MCP servers of symfony/mcp-bundle whose calls come from this agent')->end()
+                        ->end()
+                    ->end()
+                    ->validate()
+                        ->ifTrue(static function (array $agents): bool {
+                            $servers = array_merge(...array_values(array_map(static fn (array $a) => $a['mcp_servers'], $agents ?: [['mcp_servers' => []]])));
+
+                            return \count($servers) !== \count(array_unique($servers));
+                        })
+                        ->thenInvalid('An MCP server belongs to one agent only.')
+                    ->end()
+                ->end()
+                ->enumNode('unknown_agent')->values(['deny', 'allow'])->defaultValue('deny')->info('A call from no declared agent, once agents are declared')->end()
             ->end();
     }
 
-    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, expire_after: int, four_eyes: bool, mode: string, lock_factory: string, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}, notifier: array{enabled: bool, importance?: string, channels?: list<string>, approvals_url?: ?string}} $config */
+    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, expire_after: int, four_eyes: bool, mode: string, lock_factory: string, agents: array<string, array{tools: list<string>, mcp_servers: list<string>}>, unknown_agent: string, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}, notifier: array{enabled: bool, importance?: string, channels?: list<string>, approvals_url?: ?string}} $config */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $expire = 0 === $config['expire_after'] ? null : $config['expire_after'];
         $container->parameters()
             ->set('tool_guard.tool_classes', [])
+            ->set('tool_guard.mcp_agents', array_merge([], ...array_values(array_map(
+                static fn (string $name, array $a) => array_fill_keys($a['mcp_servers'], $name), array_keys($config['agents']), $config['agents'],
+            ))))
             ->set('tool_guard.approvals_dir', $config['approvals_dir'])
             ->set('tool_guard.journal', $config['journal'])
             ->set('tool_guard.cache', $config['cache']);
@@ -88,6 +110,7 @@ final class ToolGuardBundle extends AbstractBundle
             service(ApprovalStore::class), service(Journal::class),
             service('security.authorization_checker')->nullOnInvalid(), service($config['cache'])->nullOnInvalid(), service('event_dispatcher')->nullOnInvalid(), $config['max_pending_per_user'],
             service($config['lock_factory'])->nullOnInvalid(), $config['mode'], $expire,
+            array_map(static fn (array $a) => ['tools' => $a['tools']], $config['agents']), 'allow' === $config['unknown_agent'],
         ]);
         $s->set(GuardedInvoker::class)->args([service(Guard::class), service(CurrentUser::class), service_locator([])])->public();
         $s->set(Approver::class)->args([service(ApprovalStore::class), service_locator([]), service(Journal::class), service('event_dispatcher')->nullOnInvalid(), $expire, $config['four_eyes']]);
@@ -112,7 +135,9 @@ final class ToolGuardBundle extends AbstractBundle
                 ->tag('kernel.event_listener', ['event' => ApprovalRequested::class]);
         }
         if (class_exists(ToolCallRequested::class)) {
-            $s->set(GuardToolCalls::class)->args([service(Guard::class), service(CurrentUser::class)])
+            // registered for every agent by symfony/ai-bundle through its #[AsInputProcessor] / #[AsOutputProcessor]
+            $s->set(AgentScope::class)->autoconfigure()->public()->tag('kernel.reset', ['method' => 'reset']);
+            $s->set(GuardToolCalls::class)->args([service(Guard::class), service(CurrentUser::class), service(AgentScope::class)])
                 ->tag('kernel.event_listener', ['event' => ToolCallRequested::class, 'priority' => 64]);
         }
         $s->set(ApprovalsCommand::class)->args([service(ApprovalStore::class), service(Approver::class), service(Journal::class)])->tag('console.command');

@@ -18,7 +18,7 @@ final class ToolGuardDataCollector extends DataCollector
     public function onDecision(ToolCallDecided $e): void
     {
         $this->calls[] = [
-            'tool' => $e->call->tool, 'channel' => $e->call->channel, 'user' => $e->call->user,
+            'tool' => $e->call->tool, 'channel' => $e->call->channel, 'user' => $e->call->user, 'agent' => $e->call->agent,
             'arguments' => $e->call->arguments, 'verdict' => $e->decision->verdict,
             'reason' => $e->wouldHave?->reason ?? $e->decision->reason, 'approval' => $e->decision->approvalId,
             'would' => $e->wouldHave?->verdict,

@@ -40,6 +40,7 @@ final class DemoCommandsTest extends TestCase
         self::assertSame(0, $code, $out);
         self::assertStringContainsString('1 ran, 2 wait for a human, 6 refused', $out);
         self::assertStringContainsString('all 9 ran. Without Tool Guard, the prompt was the only lock.', $out);
+        self::assertStringContainsString('agent "assistant" may not call "export_customers"', $out, 'the boss through the shop\'s assistant');
     }
 
     public function testTheRealModelAttackAsksForAKey(): void

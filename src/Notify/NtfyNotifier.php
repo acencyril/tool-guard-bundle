@@ -50,7 +50,7 @@ final class NtfyNotifier
         try {
             $this->http->request('POST', $this->topicUrl, [
                 'headers' => $headers,
-                'body' => sprintf("%s\n%s\nasked by %s · #%s", $a->reason, mb_substr((string) $args, 0, 600), $a->requestedBy ?? 'anonymous', $a->id),
+                'body' => sprintf("%s\n%s\nasked by %s%s · #%s", $a->reason, mb_substr((string) $args, 0, 600), $a->requestedBy ?? 'anonymous', null === $a->agent ? '' : ' via '.$a->agent, $a->id),
                 'timeout' => 5,
             ])->getStatusCode();
         } catch (\Throwable $e) {

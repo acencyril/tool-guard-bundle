@@ -33,7 +33,7 @@ final class SymfonyNotifierListener
     {
         $a = $event->approval;
         $args = json_encode($a->arguments, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_PARTIAL_OUTPUT_ON_ERROR);
-        $content = sprintf("%s\n%s\nasked by %s · #%s", $a->reason, mb_substr((string) $args, 0, 600), $a->requestedBy ?? 'anonymous', $a->id);
+        $content = sprintf("%s\n%s\nasked by %s%s · #%s", $a->reason, mb_substr((string) $args, 0, 600), $a->requestedBy ?? 'anonymous', null === $a->agent ? '' : ' via '.$a->agent, $a->id);
         $review = null;
         if (null !== $this->approvalsUrl && '' !== $this->approvalsUrl) {
             $review = $this->approvalsUrl.'#r-'.$a->id;

@@ -78,7 +78,7 @@ final class GuardPass implements CompilerPassInterface
             $inner ??= new Definition(ReferenceHandler::class, null === $locator ? [] : [$locator]);
             $guarded = 'tool_guard.mcp.'.$m[1].'.reference_handler';
             $container->register($guarded, GuardedReferenceHandler::class)
-                ->setArguments([$inner, new Reference(Guard::class), new Reference(CurrentUser::class)]);
+                ->setArguments([$inner, new Reference(Guard::class), new Reference(CurrentUser::class), $container->getParameter('tool_guard.mcp_agents')[$m[1]] ?? null]);
             $calls[] = ['setReferenceHandler', [new Reference($guarded)]];
             $def->setMethodCalls($calls);
         }

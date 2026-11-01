@@ -17,7 +17,7 @@ use Symfony\AI\Agent\Toolbox\ToolResult;
  */
 final class GuardToolCalls
 {
-    public function __construct(private readonly Guard $guard, private readonly CurrentUser $user)
+    public function __construct(private readonly Guard $guard, private readonly CurrentUser $user, private readonly ?AgentScope $agent = null)
     {
     }
 
@@ -29,7 +29,7 @@ final class GuardToolCalls
         }
         $call = $event->getToolCall();
         $decision = $this->guard->decide(new Invocation(
-            Invocation::AGENT, $call->getName(), $ref->getClass(), $ref->getMethod(), $call->getArguments(), $this->user->identifier(),
+            Invocation::AGENT, $call->getName(), $ref->getClass(), $ref->getMethod(), $call->getArguments(), $this->user->identifier(), $this->agent?->current(),
         ));
         if (!$decision->allowed()) {
             $event->setResult(new ToolResult($call, $decision->messageForModel()));

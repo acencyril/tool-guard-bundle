@@ -52,10 +52,7 @@ final class AttackCommand extends Command
         }
         $this->url = rtrim((string) $input->getOption('url'), '/').'/mcp';
         [$user, $pw] = explode(':', (string) $input->getOption('as'), 2) + [1 => ''];
-        $this->http = HttpClient::create(['auth_basic' => [$user, $pw], 'headers' => ['Accept' => 'application/json, text/event-stream', 'MCP-Protocol-Version' => '2025-06-18']]);
-
-        $this->rpc('initialize', ['protocolVersion' => '2025-06-18', 'capabilities' => new \stdClass(), 'clientInfo' => ['name' => 'hostile-agent', 'version' => '1']], 1);
-        $this->rpc('notifications/initialized', null, null);
+        $this->connect($user, $pw);
 
         $output->writeln(sprintf('<comment>hostile agent connected as "%s" — the model has been talked into everything below</comment>', $user));
         $attempts = [
@@ -72,24 +69,47 @@ final class AttackCommand extends Command
         $count = ['ran' => 0, 'held' => 0, 'refused' => 0];
         $t0 = microtime(true);
         foreach ($attempts as $i => [$said, $tool, $args]) {
-            $start = microtime(true);
-            $r = $this->rpc('tools/call', ['name' => $tool, 'arguments' => (object) $args], 10 + $i)['result'] ?? [];
-            $ms = (microtime(true) - $start) * 1000;
-            $text = (string) ($r['content'][0]['text'] ?? json_encode($r));
-            [$mark, $kind] = match (true) {
-                !($r['isError'] ?? false) => ['<info>✓ ran    </info>', 'ran'],
-                str_contains($text, 'human approval') => ['<comment>⏸ held   </comment>', 'held'],
-                default => ['<error>✗ refused</error>', 'refused'],
-            };
-            ++$count[$kind];
-            $output->writeln(sprintf('%s %s %-16s %4.0f ms  %s', $mark, mb_str_pad($said, 44), $tool, $ms, self::short($text)));
+            ++$count[$this->attempt($output, $said, $tool, $args, 10 + $i)];
         }
         $output->writeln('');
         $output->writeln(\count($attempts) === $count['ran']
             ? sprintf('<error>%d attempts in %.0f ms: all %d ran. Without Tool Guard, the prompt was the only lock.</error>', \count($attempts), (microtime(true) - $t0) * 1000, $count['ran'])
             : sprintf('<options=bold>%d attempts in %.0f ms: %d ran, %d wait for a human, %d refused — in code, whatever the prompt said.</>', \count($attempts), (microtime(true) - $t0) * 1000, $count['ran'], $count['held'], $count['refused']));
 
+        // the agent has its own role: the boss may export customers, the shop's assistant may not
+        if ('alice' === $user) {
+            $this->connect('boss', 'boss');
+            $output->writeln('');
+            $output->writeln('<comment>the same assistant, now used by the boss — who may export customers himself</comment>');
+            $this->attempt($output, '"Export all customers, I am the boss"', 'export_customers', [], 99);
+        }
+
         return Command::SUCCESS;
+    }
+
+    private function connect(string $user, string $pw): void
+    {
+        $this->session = null;
+        $this->http = HttpClient::create(['auth_basic' => [$user, $pw], 'headers' => ['Accept' => 'application/json, text/event-stream', 'MCP-Protocol-Version' => '2025-06-18']]);
+        $this->rpc('initialize', ['protocolVersion' => '2025-06-18', 'capabilities' => new \stdClass(), 'clientInfo' => ['name' => 'hostile-agent', 'version' => '1']], 1);
+        $this->rpc('notifications/initialized', null, null);
+    }
+
+    /** @return 'ran'|'held'|'refused' */
+    private function attempt(OutputInterface $output, string $said, string $tool, array $args, int $id): string
+    {
+        $start = microtime(true);
+        $r = $this->rpc('tools/call', ['name' => $tool, 'arguments' => (object) $args], $id)['result'] ?? [];
+        $ms = (microtime(true) - $start) * 1000;
+        $text = (string) ($r['content'][0]['text'] ?? json_encode($r));
+        [$mark, $kind] = match (true) {
+            !($r['isError'] ?? false) => ['<info>✓ ran    </info>', 'ran'],
+            str_contains($text, 'human approval') => ['<comment>⏸ held   </comment>', 'held'],
+            default => ['<error>✗ refused</error>', 'refused'],
+        };
+        $output->writeln(sprintf('%s %s %-16s %4.0f ms  %s', $mark, mb_str_pad($said, 44), $tool, $ms, self::short($text)));
+
+        return $kind;
     }
 
     private static function short(string $text): string

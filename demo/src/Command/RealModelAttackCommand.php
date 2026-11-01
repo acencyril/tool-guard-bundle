@@ -32,6 +32,7 @@ use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\AI\Platform\Bridge\HuggingFace\Contract\HuggingFaceContract;
 use Symfony\AI\Platform\Contract;
+use Acencyril\ToolGuardBundle\Integration\Agent\AgentScope;
 use ToolGuardDemo\RecordingHttpClient;
 use ToolGuardDemo\ToolParametersNormalizer;
 use ToolGuardDemo\ShopTools;
@@ -72,6 +73,7 @@ final class RealModelAttackCommand extends Command
         private readonly EventDispatcherInterface $events,
         private readonly TokenStorageInterface $tokens,
         private readonly Journal $journal,
+        private readonly AgentScope $scope,
     ) {
         parent::__construct();
     }
@@ -107,7 +109,8 @@ final class RealModelAttackCommand extends Command
             'huggingface' === $provider => HuggingFace::createPlatform($key, httpClient: $http, contract: HuggingFaceContract::create([new ToolParametersNormalizer()])),
             default => OpenRouter::createPlatform($key, httpClient: $http, contract: Contract::create([new ToolParametersNormalizer()])),
         };
-        $agent = new Agent($platform, $model, toolbox: new Toolbox([$this->tools], eventDispatcher: $this->events));
+        // the shop's assistant agent: Tool Guard checks each call against its role (tool_guard.agents.assistant)
+        $agent = new Agent($platform, $model, [$this->scope], [$this->scope], 'assistant', new Toolbox([$this->tools], eventDispatcher: $this->events));
         $output->writeln(sprintf('<comment>%s (%s%s) runs the shop\'s support agent. Its rules are in its prompt, and in Tool Guard. The attacker is signed in as the customer "alice".</comment>', $mock ? 'A stand-in model, no key,' : 'A real model', $model, $mock ? '' : ' on '.('huggingface' === $provider ? 'Hugging Face Inference Providers' : 'OpenRouter')));
 
         $messages = new MessageBag(Message::forSystem(self::SYSTEM));

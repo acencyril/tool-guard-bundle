@@ -32,6 +32,7 @@ final class Approval
         public ?string $decidedBy = null,
         public ?\DateTimeImmutable $decidedAt = null,
         public ?string $result = null,
+        public readonly ?string $agent = null,
     ) {
     }
 
@@ -40,7 +41,7 @@ final class Approval
         return new self(
             substr(bin2hex(random_bytes(8)), 0, 8),
             $call->channel, $call->tool, $call->class, $call->method, $call->arguments, $call->user, $reason,
-            $now ?? new \DateTimeImmutable(),
+            $now ?? new \DateTimeImmutable(), agent: $call->agent,
         );
     }
 
@@ -53,7 +54,7 @@ final class Approval
 
     public function invocation(): Invocation
     {
-        return new Invocation($this->channel, $this->tool, $this->class, $this->method, $this->arguments, $this->requestedBy);
+        return new Invocation($this->channel, $this->tool, $this->class, $this->method, $this->arguments, $this->requestedBy, $this->agent);
     }
 
     /** @return array<string, mixed> */
@@ -63,7 +64,7 @@ final class Approval
             'id' => $this->id, 'channel' => $this->channel, 'tool' => $this->tool, 'class' => $this->class, 'method' => $this->method,
             'arguments' => $this->arguments, 'requested_by' => $this->requestedBy, 'reason' => $this->reason,
             'requested_at' => $this->requestedAt->format(\DATE_ATOM), 'status' => $this->status, 'decided_by' => $this->decidedBy,
-            'decided_at' => $this->decidedAt?->format(\DATE_ATOM), 'result' => $this->result,
+            'decided_at' => $this->decidedAt?->format(\DATE_ATOM), 'result' => $this->result, 'agent' => $this->agent,
         ];
     }
 
@@ -74,6 +75,7 @@ final class Approval
             (string) $d['id'], (string) $d['channel'], (string) $d['tool'], (string) $d['class'], (string) $d['method'],
             (array) $d['arguments'], $d['requested_by'] ?? null, (string) $d['reason'], new \DateTimeImmutable((string) $d['requested_at']),
             (string) $d['status'], $d['decided_by'] ?? null, isset($d['decided_at']) ? new \DateTimeImmutable((string) $d['decided_at']) : null, $d['result'] ?? null,
+            $d['agent'] ?? null,
         );
     }
 }

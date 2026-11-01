@@ -32,6 +32,7 @@ final class DemoRulesTest extends KernelTestCase
     {
         self::bootKernel(['environment' => 'test']);
         $this->resetToolGuard();
+        $this->throughAgent('assistant'); // the shop's assistant (tool_guard.agents), as demo:attack-real-model runs it
         @unlink(static::getContainer()->getParameter('kernel.project_dir').'/var/shop.json');
     }
 
@@ -80,5 +81,19 @@ final class DemoRulesTest extends KernelTestCase
         // over MCP the firewall answers first; through an agent with no user, the guard fails closed
         $tools = static::getContainer()->get(ShopTools::class);
         $this->assertToolRefused('refund', ['orderId' => 'A-1', 'amount' => 20], agentTools: $tools);
+    }
+
+    public function testTheAssistantHasItsOwnRoleEvenForTheBoss(): void
+    {
+        // the boss may export customers (ROLE_ADMIN); the shop's assistant may not, whoever talks to it
+        $this->actingAs('boss', ['ROLE_ADMIN']);
+        $this->assertToolRefused('export_customers', because: 'agent "assistant" may not call "export_customers"');
+
+        $tools = static::getContainer()->get(\ToolGuardDemo\ShopTools::class);
+        $this->assertToolRefused('export_customers', because: 'agent "assistant" may not call "export_customers"', agentTools: $tools);
+        $this->throughAgent('marketing');
+        $this->assertToolRefused('export_customers', because: 'agent "marketing" may not call "export_customers"', agentTools: $tools);
+        $this->throughAgent(null);
+        $this->assertToolRefused('export_customers', because: 'no agent identified', agentTools: $tools);
     }
 }

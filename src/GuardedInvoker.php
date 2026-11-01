@@ -28,8 +28,9 @@ final class GuardedInvoker
     /**
      * @param class-string|object  $tool      a guarded tool service (its class, or the instance)
      * @param array<string, mixed> $arguments by parameter name, as a model would send them
+     * @param string|null          $agent     the agent behind the call, checked against tool_guard.agents
      */
-    public function call(string|object $tool, string $method, array $arguments, ?string $name = null, string $channel = Invocation::CODE): mixed
+    public function call(string|object $tool, string $method, array $arguments, ?string $name = null, string $channel = Invocation::CODE, ?string $agent = null): mixed
     {
         $class = \is_object($tool) ? $tool::class : $tool;
         $service = \is_object($tool) ? $tool : ($this->tools->has($class) ? $this->tools->get($class) : null);
@@ -37,7 +38,7 @@ final class GuardedInvoker
             throw new \InvalidArgumentException(sprintf('"%s" is not a tool service with Tool Guard rules.', $class));
         }
         if ($this->guard->guards($class, $method)) {
-            $decision = $this->guard->decide(new Invocation($channel, $name ?? $method, $class, $method, $arguments, $this->user->identifier()));
+            $decision = $this->guard->decide(new Invocation($channel, $name ?? $method, $class, $method, $arguments, $this->user->identifier(), $agent));
             if (!$decision->allowed()) {
                 throw new ToolCallBlocked($decision);
             }

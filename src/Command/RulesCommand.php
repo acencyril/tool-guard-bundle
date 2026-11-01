@@ -37,19 +37,30 @@ final class RulesCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $rows = [];
         $unguarded = [];
+        $withAgents = false;
         foreach (self::tools($this->classes) as [$name, $channels, $class, $method]) {
             $rules = $this->guard->describe($class, $method);
-            if ([] === $rules) {
+            $agents = null;
+            foreach (explode(' / ', $name) as $n) {
+                $for = $this->guard->agentsFor($n);
+                $agents = null === $for ? $agents : array_unique([...$agents ?? [], ...$for]);
+            }
+            $withAgents = $withAgents || null !== $agents;
+            if ([] === $rules && null === $agents) {
                 $unguarded[] = $name;
             }
-            $rows[] = [$name, implode(', ', $channels), self::short($class).'::'.$method.'()', [] === $rules ? '<fg=yellow>none — the AI calls it freely</>' : implode("\n", $rules)];
+            $row = [$name, implode(', ', $channels), self::short($class).'::'.$method.'()', [] === $rules ? (null === $agents ? '<fg=yellow>none — the AI calls it freely</>' : 'only the agents\' roles') : implode("\n", $rules)];
+            if (null !== $agents) {
+                $row[] = [] === $agents ? '<fg=yellow>no agent</>' : implode(', ', $agents);
+            }
+            $rows[] = $row;
         }
         if ([] === $rows) {
             $io->note('No AI tool found (#[AsTool] or #[McpTool]).');
 
             return Command::SUCCESS;
         }
-        $io->table(['tool', 'for', 'method', 'rules, in the order they are checked'], $rows);
+        $io->table(['tool', 'for', 'method', 'rules, in the order they are checked', ...($withAgents ? ['agents allowed'] : [])], $rows);
         if ([] === $unguarded) {
             $io->success(sprintf('%d tool(s), every one with at least one rule.', \count($rows)));
 

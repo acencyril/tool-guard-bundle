@@ -32,6 +32,10 @@ use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
  *
  * Fails closed: an attribute that cannot be checked (no security, an argument missing) refuses.
  *
+ * Agents have their own role (`agents`): a call runs only if the user AND the agent behind it are
+ * allowed — an agent never gets every right of the person talking to it. Checked right after
+ * #[Granted], on every tool, guarded or not, as soon as one agent is declared.
+ *
  * Observe mode (mode: observe) applies nothing: every call runs, and the journal records what
  * enforce mode would have done ("would": deny or pending). Turn it on in production first, read
  * the journal, then enforce.
@@ -54,6 +58,9 @@ final class Guard
         private readonly ?LockFactory $locks = null,
         private readonly string $mode = self::ENFORCE,
         private readonly ?int $expireAfter = null,
+        /** @var array<string, array{tools: list<string>}> */
+        private readonly array $agents = [],
+        private readonly bool $allowUnknownAgent = false,
     ) {
         if (!\in_array($mode, [self::ENFORCE, self::OBSERVE], true)) {
             throw new \InvalidArgumentException(sprintf('Tool Guard mode must be "%s" or "%s".', self::ENFORCE, self::OBSERVE));
@@ -75,6 +82,9 @@ final class Guard
         ];
         if (null !== $would) {
             $entry['would'] = $would->verdict;
+        }
+        if (null !== $call->agent) {
+            $entry['agent'] = $call->agent;
         }
         $this->journal->record($entry);
         if (Decision::DENY === $decision->verdict) {
@@ -110,9 +120,12 @@ final class Guard
         return $out;
     }
 
-    /** Whether the tool has any rule (the integrations skip the journal for unguarded tools). */
+    /** Whether the tool has any rule (the integrations skip the journal for unguarded tools). With agents declared, every tool is checked. */
     public function guards(string $class, string $method): bool
     {
+        if ([] !== $this->agents) {
+            return true;
+        }
         $r = $this->rules($class, $method);
 
         return [] !== $r['granted'] || [] !== $r['limits'] || null !== $r['rate'] || null !== $r['approval'];
@@ -137,6 +150,10 @@ final class Guard
             if (!$ok) {
                 return Decision::deny($g->message ?? sprintf('permission "%s" not granted%s', $g->attribute, null === $g->subject ? '' : sprintf(' for %s "%s"', $g->subject, self::scalar($call->arguments[$g->subject]))));
             }
+        }
+
+        if (null !== $refused = $this->agentRefuses($call)) {
+            return Decision::deny($refused);
         }
 
         if (null !== $r['rate'] && !$this->withinRate($call, $r['rate'])) {
@@ -186,6 +203,38 @@ final class Guard
         $this->events?->dispatch(new ApprovalRequested($approval));
 
         return Decision::pending($reason, $approval->id);
+    }
+
+    /** The agents allowed to call this tool (debug:tool-guard); null when no agent is declared. */
+    public function agentsFor(string $tool): ?array
+    {
+        if ([] === $this->agents) {
+            return null;
+        }
+
+        return array_keys(array_filter($this->agents, static fn (array $a) => \in_array($tool, $a['tools'], true) || \in_array('*', $a['tools'], true)));
+    }
+
+    /** Why the agent behind the call may not make it, or null when it may (or no agent is declared). */
+    private function agentRefuses(Invocation $call): ?string
+    {
+        if ([] === $this->agents) {
+            return null;
+        }
+        if (null === $call->agent || !isset($this->agents[$call->agent])) {
+            if ($this->allowUnknownAgent) {
+                return null;
+            }
+
+            return null === $call->agent
+                ? sprintf('no agent identified for this call to "%s"', $call->tool)
+                : sprintf('agent "%s" is not declared', $call->agent);
+        }
+        $tools = $this->agents[$call->agent]['tools'];
+
+        return \in_array($call->tool, $tools, true) || \in_array('*', $tools, true)
+            ? null
+            : sprintf('agent "%s" may not call "%s"', $call->agent, $call->tool);
     }
 
     private function withinRate(Invocation $call, RateLimit $rate): bool

@@ -89,8 +89,13 @@ final class Kernel extends BaseKernel
         ]);
         $c->extension('mcp', ['servers' => ['shop' => ['http' => ['path' => '/mcp', 'allowed_hosts' => ['localhost', '127.0.0.1']], 'registry' => ['tools' => ['ToolGuardDemo\\']]]]]);
         $topic = self::env('TOOL_GUARD_NTFY_TOPIC');
-        // four eyes: the boss approves what alice's agent asked, nobody approves a call made for themselves
-        self::unguarded() || $c->extension('tool_guard', ['four_eyes' => true] + ('' === $topic ? [] : ['ntfy' => [
+        // four eyes: the boss approves what alice's agent asked, nobody approves a call made for themselves.
+        // agents: the shop's assistant (behind the MCP server "shop") may read orders, refund and draft the
+        // newsletter, never export customers, even when the boss talks to it; marketing only emails
+        self::unguarded() || $c->extension('tool_guard', ['four_eyes' => true, 'agents' => [
+            'assistant' => ['tools' => ['order', 'refund', 'send_newsletter'], 'mcp_servers' => ['shop']],
+            'marketing' => ['tools' => ['send_newsletter']],
+        ]] + ('' === $topic ? [] : ['ntfy' => [
             'topic_url' => 'https://ntfy.sh/'.$topic, 'approvals_url' => (self::env('DEMO_URL') ?: 'http://127.0.0.1:8000').'/admin/ai/approvals',
         ]]));
         $s = $c->services()->defaults()->autowire()->autoconfigure();
