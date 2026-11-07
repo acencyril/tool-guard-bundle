@@ -443,7 +443,8 @@ with a real model on Hugging Face Inference Providers. What broke, reported upst
   differently from what the client sent (an explicit `null` ignored for a nullable parameter with a
   default; PHPDoc pseudo-types such as `non-empty-string` turned into `object`, so valid calls are refused).
   Tool Guard checks the raw arguments, so a difference between what it sees and what the tool receives matters.
-  #641 is fixed in [#643](https://github.com/modelcontextprotocol/php-sdk/pull/643) (merged on 3 November 2026).
+  Both are fixed upstream: #640 in [#642](https://github.com/modelcontextprotocol/php-sdk/pull/642) and #641 in
+  [#643](https://github.com/modelcontextprotocol/php-sdk/pull/643), merged on 3 November 2026.
 
 One more thing the demo works around, not reported by me: Hugging Face refuses a tool sent without
 `parameters`. Symfony AI already fixed it after BETA1 ([symfony/ai#2848](https://github.com/symfony/ai/pull/2848));
