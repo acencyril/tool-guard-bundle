@@ -2,7 +2,7 @@
 
 Versions are git tags (`v0.1.0`, `v0.2.0`), published on Packagist.
 
-## 0.3.0 — not tagged yet
+## 0.3.0 — 2026-11-08
 
 - **Stop button.** `tool-guard:stop` / `tool-guard:resume`, and on the approvals page "Stop the agents"
   (recommended), one agent, one tool, or "Stop everything" (emergency). Checked before any rule, on
