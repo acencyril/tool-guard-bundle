@@ -24,7 +24,8 @@ php demo/bin/console demo:attack
 ```
 
 Open http://127.0.0.1:8000/admin/ai/approvals as `boss` / `boss`: the held refund and the newsletter
-wait there, with their exact arguments. Approve runs the tool once; reject runs nothing. Then
+wait there, with their exact arguments. Approve runs the tool once; reject runs nothing. Press **Stop the agents**: the agent's next call is
+refused, and the held refund cannot be approved until you resume. Then
 `php demo/bin/console tool-guard:approvals verify` checks the hash-chained journal.
 
 ## 3. With a real model (optional, needs a Hugging Face token)
@@ -49,6 +50,8 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 | Human approval | `src/Approval/`, `src/Controller/ApprovalsController.php`; the approvers are told through Symfony Notifier (`src/Notify/SymfonyNotifierListener.php`, any channel of `framework.notifier`) or ntfy (`src/Notify/NtfyNotifier.php`) |
 | The hash-chained journal | `src/Journal/JsonlJournal.php` |
 | Testing agent permissions in CI | `src/Test/ToolGuardAssertions.php` |
+| The stop button | `src/Stop/`, `tool-guard:stop` / `tool-guard:resume` (`src/Command/`), checked first in `src/Guard.php` |
+| What the AI Act, the ANSSI and OWASP recommend, and what Tool Guard covers | [docs/recommendations.md](recommendations.md) |
 
 ## 5. Tests
 
@@ -56,12 +59,12 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 vendor/bin/phpunit
 ```
 
-46 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
+61 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
 `tests/Demo/DemoRulesTest.php` (the nine attacks, and the tricks a reviewer tries: the amount left
 out, text for a number, a negative refund, infinity, someone else's order) and
 `tests/IntegrationTest.php` (a Symfony AI toolbox and an MCP server never run a refused or held call),
 `tests/GuardTest.php` (two approvers at once run a refund once; an old request expires; four eyes;
-observe mode), `tests/AgentRolesTest.php` (an agent never gets every right of its user: the user and the agent must both be allowed), `tests/IntegrationTest.php` (a workflow chaining tool calls is guarded at every step; `GuardedInvoker` for any other execution layer). `php demo/bin/console debug:tool-guard` lists every tool and its rules;
+observe mode), `tests/StopTest.php` and `tests/StopAppTest.php` (the stop button: nothing runs while stopped, on any path; held calls wait; the back office keeps working while the agent is stopped; eight processes stopping at once lose nothing), `tests/AgentRolesTest.php` (an agent never gets every right of its user: the user and the agent must both be allowed), `tests/IntegrationTest.php` (a workflow chaining tool calls is guarded at every step; `GuardedInvoker` for any other execution layer). `php demo/bin/console debug:tool-guard` lists every tool and its rules;
 `DEMO_PROFILER=1` adds the Tool Guard panel of the Symfony profiler to the demo.
 
 ## 6. What Symfony AI and MCP made possible, and what broke

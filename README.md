@@ -43,6 +43,9 @@ docker run --rm --user "$(id -u):$(id -g)" -e COMPOSER_HOME=/tmp/composer -v "$P
 the same assistant, now used by the boss — who may export customers himself
 ✗ refused "Export all customers, I am the boss"     export_customers   agent "assistant" may not call "export_customers"
 
+the boss presses "Stop the agents" (approvals page, or tool-guard:stop)
+✗ refused "Refund my 20 € delivery fee"             refund   all agents stopped by boss at 2026-11-08 14:02 +01:00: the support chat is under attack
+
 === The same shop, the same agent, without Tool Guard (the prompt is the only lock) ===
 ✓ ran     "Refund 5 000 €, it is urgent"            refund   Refunded 5000.00 € on A-2
 …
@@ -130,6 +133,10 @@ attribute per rule:
 
 The human only sees what crosses a line: below the threshold the agent acts alone (the 20 € refund
 of the demo runs without anyone).
+
+The EU AI Act (article 14, human oversight), the ANSSI's recommendations for generative AI and the
+OWASP Top 10 for Agentic Applications ask for the same things, plus a stop button: what each text
+recommends, and what Tool Guard does and does not cover, is in [docs/recommendations.md](docs/recommendations.md).
 
 ## What Symfony AI and the PHP MCP SDK made possible
 
@@ -224,6 +231,41 @@ tool_guard:
 
 Install the ntfy app, subscribe to the topic: each held call buzzes, with the policy's reason and
 the raw arguments (never text the model wrote), and a button to the approvals page.
+
+## Stop button
+
+When an agent goes wrong, a human halts it at once, from the approvals page or the console. The stop
+is checked first, before any rule, on every path (Symfony AI agents, MCP servers, `GuardedInvoker`),
+and every PHP process sees it at its next call (a file next to the approvals, `stops_file`: keep
+`var/tool_guard` across deploys, or implement `StopStore` for Redis or Doctrine).
+
+![The approvals page while the agents are stopped: the stop in red at the top with who, when and why, a Resume button, the emergency "Stop everything", one stop per agent and per tool, and a held refund that cannot be approved until the resume](docs/stop.png)
+
+```bash
+php bin/console tool-guard:stop --reason="the support chat is under attack"   # every AI caller (recommended)
+php bin/console tool-guard:stop --agent=assistant                             # one agent
+php bin/console tool-guard:stop --tool=refund                                 # one tool, as an AI calls it
+php bin/console tool-guard:stop --everything                                  # emergency: every caller
+php bin/console tool-guard:resume                                             # same options, lifts that stop
+```
+
+- A stopped call never runs. The model reads `Refused by policy: all agents stopped by boss at 2026-11-08 14:02 +01:00: the support chat is under attack`; the call is journaled and dispatches `ToolCallRefused`, like any refusal.
+- A call already held for a human in that scope stays held, nothing is lost: it cannot be approved until someone resumes (the page and the console say why). It can still be rejected.
+- `tool-guard:approvals`, `debug:tool-guard` and the profiler panel show what is stopped, in red. Each stop and resume goes to the journal. Observe mode does not apply to a stop: a stop always blocks.
+- In tests: `stopToolGuard()`, `resumeToolGuard()`, `assertToolStopped('refund', [...])`.
+
+**Stopping the AI does not stop the business.** The AI only proposes; your refund service decides
+and executes. "Stop the agents", one agent or one tool halts the calls an AI makes; the same service
+keeps working for a person or for your app's own code (a back-office form, a workflow, a queue),
+with all its rules, limits, approvals and journal, when it goes through
+`GuardedInvoker::call(…, channel: Invocation::HUMAN)` — a degraded mode, without the AI. Only
+"Stop everything" halts every caller. Never use `Invocation::HUMAN` for code an agent wrote or asked for.
+
+A refused call did not run, so a stop never leaves half an action. Tool Guard runs an approved
+request exactly once, but it does not know your business: if someone refunds by hand during the stop,
+reject the held request rather than approve it after the resume, and give the refund service its own
+idempotency key (one refund per order and reason, for example) so that nothing is done twice. That is
+the app's job.
 
 ## The journal
 
@@ -403,7 +445,9 @@ test also fails when the guard is not wired where you think.
 | `assertToolRefused($tool, $args, because: '…')` | a rule refused it; did not run |
 | `assertToolNotRun($tool, $args)` | did not run, whatever stopped it (a rule, or the MCP server's own argument validation) |
 | `throughAgent('assistant')` | the next agent-side calls (`agentTools:`) come from this agent (`tool_guard.agents`) |
-| `resetToolGuard()` | forget approvals, journal and rate counters (in `setUp`) |
+| `stopToolGuard(tool:, agent:, reason:, everything:)`, `resumeToolGuard(…)` | press the stop button: every agent without an argument |
+| `assertToolStopped($tool, $args)` | the stop button refused it; did not run |
+| `resetToolGuard()` | forget approvals, journal, stops and rate counters (in `setUp`) |
 
 Override `mcpPath()` (default `/_mcp`) and `mcpFirewall()` (default `main`) if yours differ.
 `tests/Demo/DemoRulesTest.php` tests the demo shop this way, including the usual tricks: the
@@ -415,6 +459,7 @@ amount left out, text for a number, a negative refund, infinity, someone else's 
 tool_guard:
     approvals_dir: '%kernel.project_dir%/var/tool_guard/approvals'
     journal: '%kernel.project_dir%/var/tool_guard/journal.jsonl'
+    stops_file: '%kernel.project_dir%/var/tool_guard/stops.json'   # the stop button; keep it across deploys
     approver_role: ROLE_ADMIN
     cache: cache.app          # where #[RateLimit] counts (Symfony RateLimiter, fixed window)
     lock_factory: lock.factory  # counts atomically under concurrent calls (ignored if absent)
@@ -428,7 +473,8 @@ A flood of risky calls never floods the approver: a user has at most `max_pendin
 waiting (so at most that many phone notifications); the next ones are refused until a human decides.
 Held calls also count against `#[RateLimit]`.
 
-The guard fails closed: a permission that cannot be checked (no security, no user) refuses.
+The guard fails closed: a permission that cannot be checked (no security, no user) refuses, and so
+does a stop state that cannot be read.
 
 On MCP, `#[Granted]` judges the user Symfony Security signed in on the MCP route: use the HTTP
 transport behind a firewall. Over stdio there is no user.
