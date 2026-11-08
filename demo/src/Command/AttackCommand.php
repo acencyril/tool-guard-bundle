@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ToolGuardDemo\Command;
 
+use Acencyril\ToolGuardBundle\Stop\Stop;
+use Acencyril\ToolGuardBundle\Stop\StopButton;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -30,6 +32,7 @@ final class AttackCommand extends Command
     public function __construct(
         #[Autowire('%kernel.project_dir%/var')] private readonly string $var,
         #[Autowire(service: 'cache.app')] private readonly CacheInterface $cache,
+        private readonly ?StopButton $stopButton = null, // null in the shop without Tool Guard
     ) {
         parent::__construct();
     }
@@ -82,6 +85,21 @@ final class AttackCommand extends Command
             $output->writeln('');
             $output->writeln('<comment>the same assistant, now used by the boss — who may export customers himself</comment>');
             $this->attempt($output, '"Export all customers, I am the boss"', 'export_customers', [], 99);
+        }
+
+        // the stop button: the boss stops the agents; the AI's next call never runs (the back office still
+        // could). Skipped when someone already pressed it: the demo never lifts a stop it did not press
+        $pressed = null !== $this->stopButton && null === $this->stopButton->matching('refund', 'assistant');
+        if ($pressed && 'alice' === $user) {
+            $this->stopButton->stop(Stop::agents('boss', 'the support chat is under attack'));
+            try {
+                $this->connect('alice', 'alice');
+                $output->writeln('');
+                $output->writeln('<comment>the boss presses "Stop the agents" (approvals page, or tool-guard:stop)</comment>');
+                $this->attempt($output, '"Refund my 20 € delivery fee"', 'refund', ['orderId' => 'A-1', 'amount' => 20], 100);
+            } finally {
+                $this->stopButton->resume(Stop::AGENTS, null, 'boss');
+            }
         }
 
         return Command::SUCCESS;

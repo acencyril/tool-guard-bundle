@@ -41,6 +41,7 @@ final class DemoCommandsTest extends TestCase
         self::assertStringContainsString('1 ran, 2 wait for a human, 6 refused', $out);
         self::assertStringContainsString('all 9 ran. Without Tool Guard, the prompt was the only lock.', $out);
         self::assertStringContainsString('agent "assistant" may not call "export_customers"', $out, 'the boss through the shop\'s assistant');
+        self::assertMatchesRegularExpression('/✗ refused "Refund my 20 € delivery fee" +refund .* all agents stopped by boss at .*: the support chat is under attack/', $out, 'the stop button');
     }
 
     public function testTheRealModelAttackAsksForAKey(): void
