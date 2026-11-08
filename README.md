@@ -54,6 +54,19 @@ the boss presses "Stop the agents" (approvals page, or tool-guard:stop)
 
 The details (each step by hand, the approval page, a real model) are in [Run the demo step by step](#run-the-demo-step-by-step).
 
+## You don't need Symfony AI
+
+Tool Guard needs a Symfony application, not Symfony AI. The same attributes and the same stop button
+guard the tools whichever way your agent reaches them:
+
+- **Symfony AI agents** (`symfony/ai-bundle`): every tool call the toolbox runs;
+- **MCP servers** built with `symfony/mcp-bundle` or the PHP MCP SDK, with or without Symfony AI;
+- **anything else**: your own loop calling the OpenAI or Mistral API, another PHP agent library,
+  a workflow, a Messenger handler, code an agent wrote. Call the tool through `GuardedInvoker`
+  ([Whatever path the call takes](#whatever-path-the-call-takes)).
+
+Symfony AI and the MCP bundle are only suggested in `composer.json`; install the ones you use.
+
 ## How it works
 
 It guards the tools of [Symfony AI](https://symfony.com/doc/current/ai/index.html) agents and of
