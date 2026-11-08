@@ -27,4 +27,5 @@ jobs:
           tools: composer
       - run: composer install --no-interaction --no-progress
       - run: vendor/bin/phpunit
-      - run: composer audit --abandoned=report   # a known vulnerable dependency fails the build
+      # what a project installing Tool Guard gets today (the lock only pins the demo): a known vulnerable dependency fails the build
+      - run: composer update --no-interaction --no-progress --quiet && composer audit --abandoned=report
