@@ -10,4 +10,6 @@ return static function (RoutingConfigurator $routes): void {
     $routes->add('tool_guard_approvals', '/approvals')->controller([ApprovalsController::class, 'index'])->methods(['GET']);
     $routes->add('tool_guard_decide', '/approvals/{id}/{decision}')->controller([ApprovalsController::class, 'decide'])
         ->methods(['POST'])->requirements(['id' => '[a-f0-9]{8}', 'decision' => 'approve|reject']);
+    $routes->add('tool_guard_stop', '/stop')->controller([ApprovalsController::class, 'stop'])->methods(['POST']);
+    $routes->add('tool_guard_resume', '/resume')->controller([ApprovalsController::class, 'resume'])->methods(['POST']);
 };

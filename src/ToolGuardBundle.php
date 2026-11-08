@@ -8,7 +8,9 @@ use Acencyril\ToolGuardBundle\Approval\ApprovalStore;
 use Acencyril\ToolGuardBundle\Approval\Approver;
 use Acencyril\ToolGuardBundle\Approval\FilesystemApprovalStore;
 use Acencyril\ToolGuardBundle\Command\ApprovalsCommand;
+use Acencyril\ToolGuardBundle\Command\ResumeCommand;
 use Acencyril\ToolGuardBundle\Command\RulesCommand;
+use Acencyril\ToolGuardBundle\Command\StopCommand;
 use Acencyril\ToolGuardBundle\Controller\ApprovalsController;
 use Acencyril\ToolGuardBundle\DependencyInjection\GuardPass;
 use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
@@ -20,6 +22,9 @@ use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
 use Acencyril\ToolGuardBundle\Notify\NtfyNotifier;
 use Acencyril\ToolGuardBundle\Notify\SymfonyNotifierListener;
 use Acencyril\ToolGuardBundle\Profiler\ToolGuardDataCollector;
+use Acencyril\ToolGuardBundle\Stop\FilesystemStopStore;
+use Acencyril\ToolGuardBundle\Stop\StopButton;
+use Acencyril\ToolGuardBundle\Stop\StopStore;
 use Symfony\AI\Agent\Toolbox\Event\ToolCallRequested;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -46,6 +51,7 @@ final class ToolGuardBundle extends AbstractBundle
             ->children()
                 ->scalarNode('approvals_dir')->defaultValue('%kernel.project_dir%/var/tool_guard/approvals')->end()
                 ->scalarNode('journal')->defaultValue('%kernel.project_dir%/var/tool_guard/journal.jsonl')->end()
+                ->scalarNode('stops_file')->defaultValue('%kernel.project_dir%/var/tool_guard/stops.json')->info('Where the stop button keeps what is stopped (shared by every PHP process; keep it across deploys)')->end()
                 ->scalarNode('approver_role')->defaultValue('ROLE_ADMIN')->info('Who may approve or reject on the approvals page')->end()
                 ->scalarNode('cache')->defaultValue('cache.app')->info('PSR-6 pool counting #[RateLimit]')->end()
                 ->arrayNode('ntfy')->info('A push to the approvers\' phones when a call waits (https://ntfy.sh)')->canBeEnabled()
@@ -88,7 +94,7 @@ final class ToolGuardBundle extends AbstractBundle
             ->end();
     }
 
-    /** @param array{approvals_dir: string, journal: string, approver_role: string, cache: string, max_pending_per_user: int, expire_after: int, four_eyes: bool, mode: string, lock_factory: string, agents: array<string, array{tools: list<string>, mcp_servers: list<string>}>, unknown_agent: string, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}, notifier: array{enabled: bool, importance?: string, channels?: list<string>, approvals_url?: ?string}} $config */
+    /** @param array{approvals_dir: string, journal: string, stops_file: string, approver_role: string, cache: string, max_pending_per_user: int, expire_after: int, four_eyes: bool, mode: string, lock_factory: string, agents: array<string, array{tools: list<string>, mcp_servers: list<string>}>, unknown_agent: string, ntfy: array{enabled: bool, topic_url?: string, approvals_url?: ?string, token?: ?string}, notifier: array{enabled: bool, importance?: string, channels?: list<string>, approvals_url?: ?string}} $config */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $expire = 0 === $config['expire_after'] ? null : $config['expire_after'];
@@ -99,28 +105,35 @@ final class ToolGuardBundle extends AbstractBundle
             ))))
             ->set('tool_guard.approvals_dir', $config['approvals_dir'])
             ->set('tool_guard.journal', $config['journal'])
+            ->set('tool_guard.stops_file', $config['stops_file'])
             ->set('tool_guard.cache', $config['cache']);
         $s = $container->services();
         $s->set(FilesystemApprovalStore::class)->args([$config['approvals_dir']]);
         $s->alias(ApprovalStore::class, FilesystemApprovalStore::class);
         $s->set(JsonlJournal::class)->args([$config['journal']]);
         $s->alias(Journal::class, JsonlJournal::class);
+        $s->set(FilesystemStopStore::class)->args([$config['stops_file']]);
+        $s->alias(StopStore::class, FilesystemStopStore::class);
+        $s->set(StopButton::class)->args([service(StopStore::class), service(Journal::class)])->public();
         $s->set(CurrentUser::class)->args([service('security.token_storage')->nullOnInvalid()]);
         $s->set(Guard::class)->args([
             service(ApprovalStore::class), service(Journal::class),
             service('security.authorization_checker')->nullOnInvalid(), service($config['cache'])->nullOnInvalid(), service('event_dispatcher')->nullOnInvalid(), $config['max_pending_per_user'],
             service($config['lock_factory'])->nullOnInvalid(), $config['mode'], $expire,
             array_map(static fn (array $a) => ['tools' => $a['tools']], $config['agents']), 'allow' === $config['unknown_agent'],
+            service(StopStore::class),
         ]);
         $s->set(GuardedInvoker::class)->args([service(Guard::class), service(CurrentUser::class), service_locator([])])->public();
-        $s->set(Approver::class)->args([service(ApprovalStore::class), service_locator([]), service(Journal::class), service('event_dispatcher')->nullOnInvalid(), $expire, $config['four_eyes']]);
+        $s->set(Approver::class)->args([service(ApprovalStore::class), service_locator([]), service(Journal::class), service('event_dispatcher')->nullOnInvalid(), $expire, $config['four_eyes'], service(StopStore::class)]);
         if ($builder->getParameter('kernel.debug')) {
-            $s->set(ToolGuardDataCollector::class)
+            $s->set(ToolGuardDataCollector::class)->args([service(StopStore::class)])
                 ->tag('data_collector', ['template' => '@ToolGuard/Collector/tool_guard.html.twig', 'id' => 'tool_guard', 'priority' => 200])
                 ->tag('kernel.event_listener', ['event' => ToolCallDecided::class, 'method' => 'onDecision'])
                 ->tag('kernel.reset', ['method' => 'reset']);
         }
-        $s->set(RulesCommand::class)->args([service(Guard::class), '%tool_guard.tool_classes%'])->tag('console.command');
+        $s->set(RulesCommand::class)->args([service(Guard::class), '%tool_guard.tool_classes%', service(StopStore::class)])->tag('console.command');
+        $s->set(StopCommand::class)->args([service(StopButton::class)])->tag('console.command');
+        $s->set(ResumeCommand::class)->args([service(StopButton::class)])->tag('console.command');
         if ($config['ntfy']['enabled']) {
             $s->set(NtfyNotifier::class)
                 ->args([service('http_client'), $config['ntfy']['topic_url'], $config['ntfy']['approvals_url'], $config['ntfy']['token'], service('logger')->nullOnInvalid()])
@@ -140,13 +153,14 @@ final class ToolGuardBundle extends AbstractBundle
             $s->set(GuardToolCalls::class)->args([service(Guard::class), service(CurrentUser::class), service(AgentScope::class)])
                 ->tag('kernel.event_listener', ['event' => ToolCallRequested::class, 'priority' => 64]);
         }
-        $s->set(ApprovalsCommand::class)->args([service(ApprovalStore::class), service(Approver::class), service(Journal::class)])->tag('console.command');
+        $s->set(ApprovalsCommand::class)->args([service(ApprovalStore::class), service(Approver::class), service(Journal::class), service(StopStore::class)])->tag('console.command');
         $s->set(ApprovalsController::class)
             ->args([
                 service(ApprovalStore::class), service(Approver::class), service(Journal::class), service(CurrentUser::class),
                 service('twig')->nullOnInvalid(), service('security.authorization_checker')->nullOnInvalid(),
                 service('security.csrf.token_manager')->nullOnInvalid(), service('router'), $config['approver_role'],
                 $config['mode'], $expire,
+                service(StopButton::class), '%tool_guard.tool_classes%', array_keys($config['agents']),
             ])
             ->public()->tag('controller.service_arguments');
     }

@@ -3,7 +3,7 @@
 {% set shield %}<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg>{% endset %}
 
 {% block toolbar %}
-    {% if collector.calls|length > 0 %}
+    {% if collector.calls|length > 0 or collector.stops is not empty %}
         {% set refused = collector.count('deny') %}
         {% set held = collector.count('pending') %}
         {% set icon %}
@@ -12,16 +12,17 @@
             <span class="sf-toolbar-label">AI tool call{{ collector.calls|length > 1 ? 's' }}</span>
         {% endset %}
         {% set text %}
+            {% for s in collector.stops %}<div class="sf-toolbar-info-piece"><b>Stopped</b><span class="sf-toolbar-status sf-toolbar-status-red">{{ s }}</span></div>{% endfor %}
             <div class="sf-toolbar-info-piece"><b>Allowed</b><span class="sf-toolbar-status sf-toolbar-status-green">{{ collector.count('allow') }}</span></div>
             <div class="sf-toolbar-info-piece"><b>Held for a human</b><span class="sf-toolbar-status sf-toolbar-status-yellow">{{ held }}</span></div>
             <div class="sf-toolbar-info-piece"><b>Refused</b><span class="sf-toolbar-status sf-toolbar-status-red">{{ refused }}</span></div>
         {% endset %}
-        {{ include('@WebProfiler/Profiler/toolbar_item.html.twig', { link: true, status: refused > 0 ? 'red' : (held > 0 ? 'yellow' : '') }) }}
+        {{ include('@WebProfiler/Profiler/toolbar_item.html.twig', { link: true, status: refused > 0 or collector.stops is not empty ? 'red' : (held > 0 ? 'yellow' : '') }) }}
     {% endif %}
 {% endblock %}
 
 {% block menu %}
-    <span class="label{{ collector.calls is empty ? ' disabled' }}{{ collector.count('deny') > 0 ? ' label-status-error' : (collector.count('pending') > 0 ? ' label-status-warning') }}">
+    <span class="label{{ collector.calls is empty and collector.stops is empty ? ' disabled' }}{{ collector.count('deny') > 0 or collector.stops is not empty ? ' label-status-error' : (collector.count('pending') > 0 ? ' label-status-warning') }}">
         <span class="icon">{{ shield }}</span>
         <strong>Tool Guard</strong>
         {% if collector.calls is not empty %}<span class="count">{{ collector.calls|length }}</span>{% endif %}
@@ -30,6 +31,11 @@
 
 {% block panel %}
     <h2>Tool Guard</h2>
+    {% if collector.stops is not empty %}
+        <div class="alert alert-error"><strong>Stopped.</strong> Every matching call is refused before any rule, and no held call in these scopes can be approved until someone resumes (<code>tool-guard:resume</code> or the approvals page):
+            <ul>{% for s in collector.stops %}<li>{{ s }}</li>{% endfor %}</ul>
+        </div>
+    {% endif %}
     {% if collector.calls is empty %}
         <div class="empty"><p>No AI tool call in this request.</p></div>
     {% else %}

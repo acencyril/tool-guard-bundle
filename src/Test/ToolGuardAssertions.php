@@ -6,6 +6,8 @@ namespace Acencyril\ToolGuardBundle\Test;
 
 use PHPUnit\Framework\Assert;
 use Acencyril\ToolGuardBundle\Integration\Agent\AgentScope;
+use Acencyril\ToolGuardBundle\Stop\Stop;
+use Acencyril\ToolGuardBundle\Stop\StopButton;
 use Symfony\AI\Agent\Toolbox\Toolbox;
 use Symfony\AI\Platform\Result\ToolCall;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -76,13 +78,14 @@ trait ToolGuardAssertions
     }
 
     /**
-     * Forgets the approvals, the journal and the rate counters of earlier tests (call it in setUp:
-     * a #[RateLimit] would otherwise carry over from one test to the next).
+     * Forgets the approvals, the journal, the stops and the rate counters of earlier tests (call it
+     * in setUp: a #[RateLimit] or a stop would otherwise carry over from one test to the next).
      */
     protected function resetToolGuard(): void
     {
         $c = static::getContainer();
-        (new Filesystem())->remove([(string) $c->getParameter('tool_guard.approvals_dir'), (string) $c->getParameter('tool_guard.journal')]);
+        $stops = (string) $c->getParameter('tool_guard.stops_file');
+        (new Filesystem())->remove([(string) $c->getParameter('tool_guard.approvals_dir'), (string) $c->getParameter('tool_guard.journal'), $stops, $stops.'.lock']);
         $pool = (string) $c->getParameter('tool_guard.cache');
         if ($c->has($pool) && method_exists($cache = $c->get($pool), 'clear')) {
             $cache->clear();
@@ -174,6 +177,43 @@ trait ToolGuardAssertions
     {
         $o = $this->toolGuardCall($tool, $arguments, $agentTools);
         Assert::assertNotSame(ToolCallOutcome::RAN, $o->verdict, sprintf('Expected %s not to run. It ran: %s', $tool, $o));
+
+        return $o;
+    }
+
+    /**
+     * Presses the stop button, as the approvals page and tool-guard:stop do: every agent (no
+     * argument), one tool, one agent, or everything (the emergency stop, people's calls included).
+     */
+    protected function stopToolGuard(?string $tool = null, ?string $agent = null, ?string $reason = null, string $by = 'test', bool $everything = false): void
+    {
+        [$scope, $target] = self::toolGuardStopScope($tool, $agent, $everything);
+        static::getContainer()->get(StopButton::class)->stop(new Stop($scope, $target, $by, new \DateTimeImmutable(), $reason));
+    }
+
+    protected function resumeToolGuard(?string $tool = null, ?string $agent = null, string $by = 'test', bool $everything = false): void
+    {
+        [$scope, $target] = self::toolGuardStopScope($tool, $agent, $everything);
+        static::getContainer()->get(StopButton::class)->resume($scope, $target, $by);
+    }
+
+    /** @return array{string, ?string} */
+    private static function toolGuardStopScope(?string $tool, ?string $agent, bool $everything): array
+    {
+        return match (true) {
+            null !== $tool => [Stop::TOOL, $tool],
+            null !== $agent => [Stop::AGENT, $agent],
+            $everything => [Stop::ALL, null],
+            default => [Stop::AGENTS, null],
+        };
+    }
+
+    /** The stop button refused the call: the tool did not run, whatever its rules would have said. */
+    protected function assertToolStopped(string $tool, array $arguments = [], ?object $agentTools = null): ToolCallOutcome
+    {
+        $o = $this->toolGuardCall($tool, $arguments, $agentTools);
+        Assert::assertSame(ToolCallOutcome::REFUSED, $o->verdict, sprintf('Expected %s to be stopped. Got: %s', $tool, $o));
+        Assert::assertMatchesRegularExpression('/stopped by .+ at \d{4}-\d\d-\d\d \d\d:\d\d/', $o->text, sprintf('Expected %s to be refused by the stop button. Got: %s', $tool, $o));
 
         return $o;
     }

@@ -14,6 +14,8 @@ use Acencyril\ToolGuardBundle\Event\ApprovalRequested;
 use Acencyril\ToolGuardBundle\Event\ToolCallDecided;
 use Acencyril\ToolGuardBundle\Event\ToolCallRefused;
 use Acencyril\ToolGuardBundle\Journal\Journal;
+use Acencyril\ToolGuardBundle\Stop\Stop;
+use Acencyril\ToolGuardBundle\Stop\StopStore;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Lock\LockFactory;
@@ -22,23 +24,27 @@ use Symfony\Component\RateLimiter\Storage\CacheStorage;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
- * Decides each tool call an AI asks for, from the attributes on the tool's method and class,
- * in this order: #[Granted] (refuse), #[RateLimit] (refuse), #[Limit] (refuse or hold),
- * #[RequiresApproval] (hold). Everything is decided in code: whatever the model was talked
- * into, a refused call does not run. Each decision goes to the journal.
+ * Decides each tool call an AI asks for (and the calls a person or the app's own code sends through
+ * GuardedInvoker with Invocation::HUMAN). First the stop button: a call in a stopped scope (every
+ * agent, this agent, this tool — or everything) is refused before any rule is read, in every
+ * mode. Then the attributes on the tool's method and class, in this order: #[Granted] (refuse),
+ * #[RateLimit] (refuse), #[Limit] (refuse or hold), #[RequiresApproval] (hold). Everything is
+ * decided in code: whatever the model was talked into, a refused call does not run. Each decision
+ * goes to the journal.
  *
  * The text a human approves on is the policy's reason and the raw arguments, never words the
  * model wrote: the model cannot write its own justification onto the approver's screen.
  *
- * Fails closed: an attribute that cannot be checked (no security, an argument missing) refuses.
+ * Fails closed: an attribute that cannot be checked (no security, an argument missing) refuses, and
+ * so does a stop state that cannot be read.
  *
  * Agents have their own role (`agents`): a call runs only if the user AND the agent behind it are
  * allowed — an agent never gets every right of the person talking to it. Checked right after
  * #[Granted], on every tool, guarded or not, as soon as one agent is declared.
  *
- * Observe mode (mode: observe) applies nothing: every call runs, and the journal records what
- * enforce mode would have done ("would": deny or pending). Turn it on in production first, read
- * the journal, then enforce.
+ * Observe mode (mode: observe) applies no rule: every call runs (unless a human pressed stop), and
+ * the journal records what enforce mode would have done ("would": deny or pending). Turn it on in
+ * production first, read the journal, then enforce.
  */
 final class Guard
 {
@@ -61,6 +67,7 @@ final class Guard
         /** @var array<string, array{tools: list<string>}> */
         private readonly array $agents = [],
         private readonly bool $allowUnknownAgent = false,
+        private readonly ?StopStore $stops = null,
     ) {
         if (!\in_array($mode, [self::ENFORCE, self::OBSERVE], true)) {
             throw new \InvalidArgumentException(sprintf('Tool Guard mode must be "%s" or "%s".', self::ENFORCE, self::OBSERVE));
@@ -69,9 +76,10 @@ final class Guard
 
     public function decide(Invocation $call): Decision
     {
-        $decision = $this->evaluate($call);
+        $stopped = $this->stopped($call);
+        $decision = $stopped ?? $this->evaluate($call);
         $would = null;
-        if (self::OBSERVE === $this->mode && !$decision->allowed()) {
+        if (null === $stopped && self::OBSERVE === $this->mode && !$decision->allowed()) {
             [$would, $decision] = [$decision, Decision::allow()];
         } elseif (Decision::PENDING === $decision->verdict) {
             $decision = $this->hold($call, (string) $decision->reason);
@@ -85,6 +93,9 @@ final class Guard
         }
         if (null !== $call->agent) {
             $entry['agent'] = $call->agent;
+        }
+        if (null !== $stopped) {
+            $entry['stopped'] = true;
         }
         $this->journal->record($entry);
         if (Decision::DENY === $decision->verdict) {
@@ -120,15 +131,51 @@ final class Guard
         return $out;
     }
 
-    /** Whether the tool has any rule (the integrations skip the journal for unguarded tools). With agents declared, every tool is checked. */
-    public function guards(string $class, string $method): bool
+    /**
+     * Whether the call must pass the guard (the integrations skip unguarded tools). With agents
+     * declared, every tool is checked; while a stop holds this tool or agent, so is any tool
+     * (and any tool at all when the tool is not named).
+     */
+    public function guards(string $class, string $method, ?string $tool = null, ?string $agent = null): bool
     {
-        if ([] !== $this->agents) {
+        if ([] !== $this->agents || $this->mayBeStopped($tool, $agent)) {
             return true;
         }
         $r = $this->rules($class, $method);
 
         return [] !== $r['granted'] || [] !== $r['limits'] || null !== $r['rate'] || null !== $r['approval'];
+    }
+
+    /**
+     * The stop button comes before any rule: a stopped call is refused, whatever the mode. A call a
+     * person or the app's own code makes (Invocation::HUMAN) is only halted by the emergency stop.
+     */
+    private function stopped(Invocation $call): ?Decision
+    {
+        if (null === $this->stops) {
+            return null;
+        }
+        try {
+            $stop = Stop::matching($this->stops->all(), $call->tool, $call->agent, $call->byAi());
+        } catch (\Throwable) {
+            return Decision::deny('the stop state cannot be read'); // fail closed
+        }
+
+        return null === $stop ? null : Decision::deny($stop->describe());
+    }
+
+    private function mayBeStopped(?string $tool, ?string $agent): bool
+    {
+        if (null === $this->stops) {
+            return false;
+        }
+        try {
+            $stops = $this->stops->all();
+        } catch (\Throwable) {
+            return true; // decide() refuses it
+        }
+
+        return [] !== $stops && (null === $tool || null !== Stop::matching($stops, $tool, $agent));
     }
 
     private function evaluate(Invocation $call): Decision
@@ -218,7 +265,8 @@ final class Guard
     /** Why the agent behind the call may not make it, or null when it may (or no agent is declared). */
     private function agentRefuses(Invocation $call): ?string
     {
-        if ([] === $this->agents) {
+        if ([] === $this->agents || !$call->byAi()) {
+            // the agents' roles bound what an AI may do; a person or the app's own code is no agent
             return null;
         }
         if (null === $call->agent || !isset($this->agents[$call->agent])) {

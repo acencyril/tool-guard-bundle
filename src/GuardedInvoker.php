@@ -13,6 +13,11 @@ use Psr\Container\ContainerInterface;
  *
  *     $invoker->call(ShopTools::class, 'refund', ['orderId' => 'A-1', 'amount' => 500]);
  *
+ * A person or the app's own deterministic code (a back-office form, a queue) passes
+ * channel: Invocation::HUMAN: the same rules and journal, without the agents' roles, and still
+ * running while the agents are stopped (only "stop everything" halts it). Never for code an agent
+ * wrote or asked for.
+ *
  * Allowed: the method runs and its result is returned. Refused or held: nothing runs and
  * ToolCallBlocked is thrown (a held call is already waiting on the approvals page).
  */
@@ -37,7 +42,7 @@ final class GuardedInvoker
         if (null === $service) {
             throw new \InvalidArgumentException(sprintf('"%s" is not a tool service with Tool Guard rules.', $class));
         }
-        if ($this->guard->guards($class, $method)) {
+        if ($this->guard->guards($class, $method, $name ?? $method, $agent)) {
             $decision = $this->guard->decide(new Invocation($channel, $name ?? $method, $class, $method, $arguments, $this->user->identifier(), $agent));
             if (!$decision->allowed()) {
                 throw new ToolCallBlocked($decision);

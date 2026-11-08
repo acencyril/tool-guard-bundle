@@ -24,12 +24,13 @@ final class GuardToolCalls
     public function __invoke(ToolCallRequested $event): void
     {
         $ref = $event->getDefinition()->getReference();
-        if (!$this->guard->guards($ref->getClass(), $ref->getMethod())) {
+        $call = $event->getToolCall();
+        $agent = $this->agent?->current();
+        if (!$this->guard->guards($ref->getClass(), $ref->getMethod(), $call->getName(), $agent)) {
             return;
         }
-        $call = $event->getToolCall();
         $decision = $this->guard->decide(new Invocation(
-            Invocation::AGENT, $call->getName(), $ref->getClass(), $ref->getMethod(), $call->getArguments(), $this->user->identifier(), $this->agent?->current(),
+            Invocation::AGENT, $call->getName(), $ref->getClass(), $ref->getMethod(), $call->getArguments(), $this->user->identifier(), $agent,
         ));
         if (!$decision->allowed()) {
             $event->setResult(new ToolResult($call, $decision->messageForModel()));

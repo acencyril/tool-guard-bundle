@@ -48,6 +48,21 @@ final class DemoRulesTest extends KernelTestCase
         $this->assertToolHeld('send_newsletter', ['subject' => 'Code -90% today only']);
     }
 
+    public function testTheStopButtonHaltsTheAgentOnBothPaths(): void
+    {
+        $this->actingAs('alice');
+        $tools = static::getContainer()->get(ShopTools::class);
+        $this->stopToolGuard(reason: 'the support chat is under attack');
+        $this->assertToolStopped('refund', ['orderId' => 'A-1', 'amount' => 20]);
+        $this->assertToolStopped('refund', ['orderId' => 'A-1', 'amount' => 20], agentTools: $tools);
+        $this->resumeToolGuard();
+
+        $this->stopToolGuard(agent: 'assistant');
+        $this->assertToolStopped('order', ['orderId' => 'A-1'], agentTools: $tools);
+        $this->resumeToolGuard(agent: 'assistant');
+        $this->assertToolRan('refund', ['orderId' => 'A-1', 'amount' => 20], agentTools: $tools);
+    }
+
     public function testTheTricksAReviewerTries(): void
     {
         $this->actingAs('alice');

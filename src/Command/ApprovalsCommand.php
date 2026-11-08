@@ -8,6 +8,7 @@ use Acencyril\ToolGuardBundle\Approval\ApprovalStore;
 use Acencyril\ToolGuardBundle\Approval\Approver;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Acencyril\ToolGuardBundle\Journal\JsonlJournal;
+use Acencyril\ToolGuardBundle\Stop\StopStore;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -19,7 +20,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'tool-guard:approvals', description: 'List, approve or reject the AI actions waiting for a human; verify the journal')]
 final class ApprovalsCommand extends Command
 {
-    public function __construct(private readonly ApprovalStore $store, private readonly Approver $approver, private readonly Journal $journal)
+    public function __construct(private readonly ApprovalStore $store, private readonly Approver $approver, private readonly Journal $journal, private readonly ?StopStore $stops = null)
     {
         parent::__construct();
     }
@@ -38,6 +39,7 @@ final class ApprovalsCommand extends Command
         try {
             switch ($action) {
                 case 'list':
+                    StopCommand::show($io, StopCommand::read($this->stops));
                     $rows = array_map(static fn ($a) => [$a->id, $a->tool, $a->requestedBy ?? '—', $a->reason, json_encode($a->arguments, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES)], $this->store->all('pending'));
                     [] === $rows ? $io->success('Nothing waiting.') : $io->table(['id', 'tool', 'asked by', 'why', 'arguments'], $rows);
 

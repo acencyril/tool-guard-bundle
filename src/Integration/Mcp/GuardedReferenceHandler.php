@@ -38,7 +38,7 @@ final class GuardedReferenceHandler implements ReferenceHandlerInterface
             \is_string($reference->handler) && class_exists($reference->handler) => [$reference->handler, '__invoke'],
             default => [null, null],
         };
-        if ($reference instanceof ToolReference && null !== $class && $this->guard->guards($class, $method)) {
+        if ($reference instanceof ToolReference && null !== $class && $this->guard->guards($class, $method, $reference->tool->name, $this->agent)) {
             $args = array_filter($arguments, static fn ($k) => !\in_array($k, ['_session', '_request'], true), \ARRAY_FILTER_USE_KEY);
             $decision = $this->guard->decide(new Invocation(
                 Invocation::MCP, $reference->tool->name, $class, $method, $args, $this->user->identifier(), $this->agent,

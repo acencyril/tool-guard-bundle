@@ -6,7 +6,10 @@ namespace Acencyril\ToolGuardBundle\Approval;
 
 use Acencyril\ToolGuardBundle\Call;
 use Acencyril\ToolGuardBundle\Event\ApprovalDecided;
+use Acencyril\ToolGuardBundle\Invocation;
 use Acencyril\ToolGuardBundle\Journal\Journal;
+use Acencyril\ToolGuardBundle\Stop\Stop;
+use Acencyril\ToolGuardBundle\Stop\StopStore;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 
@@ -18,6 +21,8 @@ use Psr\EventDispatcher\EventDispatcherInterface;
  * Exactly one decision per request: it is claimed in the store before the tool runs, so two
  * approvers clicking at once run it once. A request older than $expireAfter seconds can no longer
  * be approved (it is closed as expired). With $fourEyes, nobody approves a call made for themselves.
+ * While a stop holds its scope (see Stop: a person's request is only held back by the emergency stop), a request cannot be approved: it stays
+ * pending, untouched, and can be approved once someone resumes. Rejecting stays possible.
  */
 final class Approver
 {
@@ -28,6 +33,7 @@ final class Approver
         private readonly ?EventDispatcherInterface $events = null,
         private readonly ?int $expireAfter = null,
         private readonly bool $fourEyes = false,
+        private readonly ?StopStore $stops = null,
     ) {
     }
 
@@ -37,6 +43,7 @@ final class Approver
         if ($this->fourEyes && null !== $a->requestedBy && $by === $a->requestedBy) {
             throw new \LogicException(sprintf('Request "%s" was made for %s: another approver must decide it.', $id, $by));
         }
+        $this->notStopped($a);
         $this->claim($a);
         try {
             $result = $this->run($a);
@@ -74,6 +81,22 @@ final class Approver
         }
 
         return $a;
+    }
+
+    /** Nothing runs while stopped, not even what a human approves: the request waits for the resume. */
+    private function notStopped(Approval $a): void
+    {
+        if (null === $this->stops) {
+            return;
+        }
+        try {
+            $stop = Stop::matching($this->stops->all(), $a->tool, $a->agent, Invocation::HUMAN !== $a->channel);
+        } catch (\Throwable) {
+            throw new \LogicException(sprintf('Request "%s" cannot be approved: the stop state cannot be read. It still waits.', $a->id));
+        }
+        if (null !== $stop) {
+            throw new \LogicException(sprintf('Request "%s" cannot be approved while %s. Resume first; the request still waits.', $a->id, $stop->describe()));
+        }
     }
 
     private function claim(Approval $a): void

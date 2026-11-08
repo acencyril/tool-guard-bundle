@@ -4,9 +4,9 @@
 <meta charset="utf-8"><script>try{var t=localStorage.getItem('tool_guard_theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
 <title>AI actions waiting for a human</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--fg:#14161b;--muted:#5d6370;--line:#e1e4ea;--ok:#147a4b;--bad:#b42318;--warn:#8a5a00;--on-ok:#fff;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a;--on-ok:#08170f;color-scheme:dark}}
-:root[data-theme=dark]{--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a;--on-ok:#08170f;color-scheme:dark}
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14161b;--muted:#5d6370;--line:#e1e4ea;--ok:#147a4b;--bad:#b42318;--warn:#8a5a00;--on-ok:#fff;--on-bad:#fff;--bad-bg:#fdecea;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a;--on-ok:#08170f;--on-bad:#1a0806;--bad-bg:#2a1513;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#111318;--card:#1a1d24;--fg:#eceef2;--muted:#9aa1ad;--line:#2b2f39;--ok:#4cc38a;--bad:#ff6b5e;--warn:#e7b04a;--on-ok:#08170f;--on-bad:#1a0806;--bad-bg:#2a1513;color-scheme:dark}
 .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .theme{flex:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:99px}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}main{max-width:900px;margin:0 auto;padding:24px 16px}
@@ -18,6 +18,12 @@ pre{background:var(--bg);border-radius:8px;padding:10px;overflow:auto;font-size:
 button.ok{background:var(--ok);border-color:var(--ok);color:var(--on-ok)}button.no{color:var(--bad);border-color:var(--bad)}
 .tag{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 8px}.approved,.allow{color:var(--ok)}.rejected,.failed,.deny{color:var(--bad)}.pending{color:var(--warn)}.expired{color:var(--muted)}
 .notice{border-left:4px solid var(--warn)}.observe{border-left:4px solid var(--ok)}.would{color:var(--warn);font-size:12px;font-weight:700}
+.halted{background:var(--bad-bg);border:2px solid var(--bad);color:var(--fg)}.halted h2{color:var(--bad);margin:0 0 4px;font-size:19px}.halted p{margin:0 0 10px}
+.stops{list-style:none;margin:0;padding:0}.stops li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)}.stops form{margin:0}
+button.halt{background:var(--bad);border-color:var(--bad);color:var(--on-bad)}button.small{font-size:13px;padding:5px 12px}button[disabled]{opacity:.45;cursor:not-allowed}
+.stopall{display:flex;gap:8px;flex-wrap:wrap;margin:0}.stopall input{flex:1 1 200px;min-width:0;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--fg)}
+.hint{margin:8px 0 0}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px}.chips form{margin:0}.blocked{color:var(--bad);font-weight:600;margin-top:4px}
+.ev-stopped{color:var(--bad);font-weight:700}.ev-resumed{color:var(--ok);font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}
 @media (max-width:600px){table,tbody,tr,td{display:block}th{display:none}td{border:0;padding:2px 0}tr{border-bottom:1px solid var(--line);padding:6px 0}}
 </style>
@@ -25,15 +31,48 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <body><main>
 <div class="top"><h1>AI actions waiting for a human</h1><button class="theme" type="button" id="theme" aria-label="Switch between light and dark theme">◐ Theme</button></div>
 <p class="sub">An AI asked for these. They have not run. Read the arguments: approving runs the action exactly as shown.{% if expire_after %} A request expires after {{ expire_after >= 3600 ? (expire_after / 3600)|round(1, 'floor') ~ ' h' : (expire_after / 60)|round ~ ' min' }}.{% endif %}</p>
+{% if stop_button %}
+{% if stops_unreadable %}<div class="card halted" role="alert"><h2>⏹ The stop state cannot be read</h2><p>Every AI tool call is refused until it can.</p></div>{% endif %}
+{% if stops is not empty %}
+<div class="card halted" id="stopped" role="alert">
+<h2>⏹ Stopped</h2>
+<p>Nothing in these scopes runs: every call is refused, and the requests held in them cannot be approved until someone resumes.{% if stopped['all'] is not defined %} Only the AI is stopped: your team and your app's own code still use the same tools.{% endif %}</p>
+<ul class="stops">
+{% for s in stops %}
+<li><span>{{ s.describe }}</span>
+<form method="post" action="{{ path('tool_guard_resume') }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><input type="hidden" name="scope" value="{{ s.scope }}"><input type="hidden" name="target" value="{{ s.target }}"><button class="ok small" type="submit">Resume {{ s.what }}</button></form></li>
+{% endfor %}
+</ul>
+</div>
+{% endif %}
+<div class="card" id="stop-button">
+{% if stopped['agents'] is not defined or stopped['all'] is not defined %}
+<form class="stopall" method="post" action="{{ path('tool_guard_stop') }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><input name="reason" maxlength="500" placeholder="Why (optional): for the journal and the refused calls" aria-label="Why stop">
+{% if stopped['agents'] is not defined %}<button class="halt" type="submit" name="scope" value="agents">⏹ Stop the agents</button>{% endif %}
+{% if stopped['all'] is not defined %}<button class="no" type="submit" name="scope" value="all" onclick="return confirm('Emergency stop: every caller is halted, your team and your app\'s own code included. Stop everything?')">Stop everything</button>{% endif %}
+</form>
+<p class="meta hint"><strong>Stop the agents</strong> (recommended): every AI caller stops; your team and your app's own code keep using the same tools, with their rules. <strong>Stop everything</strong> is the emergency stop: it halts the business actions too.</p>
+{% else %}<div class="meta">Everything is stopped. Resume it above.</div>{% endif %}
+{% if tools is not empty or agents is not empty %}
+<div class="chips"><span class="meta">Stop one, for the AI:</span>
+{% for kind, names in {agent: agents, tool: tools} %}{% for t in names %}
+{% set on = stopped[kind ~ ':' ~ t] is defined %}
+<form method="post" action="{{ path(on ? 'tool_guard_resume' : 'tool_guard_stop') }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><input type="hidden" name="scope" value="{{ kind }}"><input type="hidden" name="target" value="{{ t }}"><button class="small{{ on ? ' ok' : ' no' }}" type="submit" title="{{ on ? 'Resume' : 'Stop' }} {{ kind }} {{ t }}">{{ on ? '▶ Resume' : '⏹' }} {{ kind == 'agent' ? 'agent ' }}{{ t }}</button></form>
+{% endfor %}{% endfor %}
+</div>
+{% endif %}
+</div>
+{% endif %}
 {% if mode == 'observe' %}<p class="card observe"><strong>Observe mode.</strong> Nothing is blocked: every call runs, and the journal shows what Tool Guard would have refused or held. Set <code>tool_guard.mode: enforce</code> when the rules look right.</p>{% endif %}
 {% for message in app.flashes('tool_guard') %}<p class="card notice">{{ message }}</p>{% endfor %}
 {% for a in pending %}
 <div class="card" id="r-{{ a.id }}">
 <div><span class="tool">{{ a.tool }}</span> <span class="meta">· {{ a.channel }} · asked by {{ a.requestedBy ?? 'anonymous' }}{% if a.agent %} via {{ a.agent }}{% endif %} · {{ a.requestedAt|date('Y-m-d H:i') }} · #{{ a.id }}</span></div>
 <div class="why">{{ a.reason }}</div>
+{% if blocked[a.id] is defined %}<div class="blocked">Cannot be approved while {{ blocked[a.id] }}. It still waits; resume to approve it.</div>{% endif %}
 <pre>{{ a.arguments|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>
 <div class="acts">
-<form method="post" action="{{ path('tool_guard_decide', {id: a.id, decision: 'approve'}) }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><button class="ok" type="submit">Approve and run</button></form>
+<form method="post" action="{{ path('tool_guard_decide', {id: a.id, decision: 'approve'}) }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><button class="ok" type="submit"{% if blocked[a.id] is defined %} disabled{% endif %}>Approve and run</button></form>
 <form method="post" action="{{ path('tool_guard_decide', {id: a.id, decision: 'reject'}) }}"><input type="hidden" name="_token" value="{{ csrf_token('tool_guard') }}"><button class="no" type="submit">Reject</button></form>
 </div>
 </div>
@@ -53,10 +92,11 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <h2>Journal</h2>
 <table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Outcome</th></tr></thead><tbody>
 {% for e in journal %}
-{% set outcome = e.verdict ?? e.status ?? '' %}
+{% set ev = e.event ?? '' %}
+{% set outcome = ev in ['stop', 'resume'] ? ev ~ (ev == 'stop' ? 'ped' : 'd') : (e.verdict ?? e.status ?? '') %}
 <tr><td>{{ e.at|date('m-d H:i:s') }}</td><td>{{ e.user ?? e.by ?? '—' }}{% if e.agent ?? null %} <span class="meta">via {{ e.agent }}</span>{% endif %}</td>
-<td>{{ e.tool ?? '' }}{% if (e.event ?? '') == 'call' %} <span class="meta">({{ e.channel ?? '' }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}</td>
-<td><span class="{{ outcome }}">{{ outcome }}</span>{% if e.would ?? null %} <span class="would">would be {{ e.would == 'deny' ? 'refused' : 'held' }}</span>{% endif %}{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
+<td>{% if ev in ['stop', 'resume'] %}{{ {all: 'everything', agents: 'all agents'}[e.scope] ?? e.scope ~ ' ' ~ e.target }} <span class="meta">(stop button)</span>{% else %}{{ e.tool ?? '' }}{% if ev == 'call' %} <span class="meta">({{ e.channel ?? '' }})</span>{% else %} <span class="meta">(decision)</span>{% endif %}{% endif %}</td>
+<td><span class="{{ ev in ['stop', 'resume'] ? 'ev-' ~ outcome : outcome }}">{{ outcome }}</span>{% if e.would ?? null %} <span class="would">would be {{ e.would == 'deny' ? 'refused' : 'held' }}</span>{% endif %}{% if e.reason ?? null %} — {{ e.reason }}{% endif %}</td></tr>
 {% endfor %}
 </tbody></table>
 </main>
