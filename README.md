@@ -15,6 +15,35 @@ Reviewing it? The [judge guide](docs/judges.md) runs it in 2 minutes and points 
 
 ▶ **The 90-second video:** [youtube.com/watch?v=BkBSQzF26Os](https://www.youtube.com/watch?v=BkBSQzF26Os) — the scripted attack, then a real model talked into a 640 € refund that Tool Guard holds for a human, while the approver's phone gets the request.
 
+## At a glance
+
+Tool Guard guards the **business actions** an agent takes in your application (refunds, customer
+records, payments, emails), not the machine it runs on. A sandbox decides which doors an agent may
+knock on; Tool Guard decides what it may do once a door is open: this order, this amount, this
+often, with a human above a threshold.
+
+- **One layer, every rule.** Permissions through your Symfony voters, numeric limits, rate limits,
+  human approval, a hash-chained journal and a stop button, as attributes on the tool method.
+  [How it works](#how-it-works) · [Human approval](#human-approval) · [Stop button](#stop-button) · [The journal](#the-journal)
+- **The human is not the agent.** A held call is approved on another channel (an admin page, Slack,
+  Teams, a phone), bound to the exact arguments, and runs exactly once. The model cannot approve
+  itself by writing "approved", and an expired request can no longer be approved.
+- **Every path, one rule set.** The same attributes guard a Symfony AI agent tool, an MCP tool
+  (symfony/mcp-bundle or the PHP MCP SDK) and any agent loop of your own through `GuardedInvoker`.
+  [You don't need Symfony AI](#you-dont-need-symfony-ai) · [Whatever path the call takes](#whatever-path-the-call-takes)
+- **Stopping the AI does not stop the business.** `tool-guard:stop` halts every AI caller at its next
+  call; your back office keeps refunding through the human channel, with every rule still applied.
+- **Tested in CI, with no model and no key.** `assertToolRan`, `assertToolHeld`, `assertToolRefused`,
+  `assertToolStopped` drive the real MCP server and a real toolbox. [Testing your rules](#testing-your-rules)
+- **Seen before it is enforced.** Observe mode logs what would have been refused; `debug:tool-guard`
+  lists every tool and the ones without rules; the profiler panel shows each decision.
+- **Tried against the real stack.** Built on Symfony AI and the PHP MCP SDK pre-releases, with a real
+  model; what broke was reported upstream with a reproduction and fixed there.
+  [Feedback on the pre-releases](#feedback-on-the-pre-releases)
+
+What it does not do is written down too: no prompt-injection detection, no filtering of what the
+model says, no undo of an action that already ran ([docs/recommendations.md](docs/recommendations.md)).
+
 ## Try it in one command
 
 No API key, no model, no database. A scripted hostile agent attacks a demo shop over MCP, first
