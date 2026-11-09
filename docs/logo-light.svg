@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="490" height="120" viewBox="0 0 490 120" role="img" aria-label="Tool Guard">
+  <title>Tool Guard</title>
+  <g fill="none" stroke="#18181b" stroke-width="9" stroke-linejoin="round">
+    <path d="M60 12 L100 26 V58 C100 84 82 100 60 108 C38 100 20 84 20 58 V26 Z"/>
+  </g>
+  <path d="M42 60 L56 74 L80 46" fill="none" stroke="#10b981" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="128" y="80" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="600" letter-spacing="-1.5" fill="#18181b">tool guard</text>
+</svg>

@@ -1,10 +1,36 @@
-# Tool Guard for Symfony AI and MCP
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" alt="Tool Guard" width="390">
+  </picture>
+</h1>
 
-[![tests](https://github.com/acencyril/tool-guard-bundle/actions/workflows/tests.yml/badge.svg)](https://github.com/acencyril/tool-guard-bundle/actions/workflows/tests.yml)
+<p align="center">
+  <strong>A prompt is not a lock.</strong><br>
+  Rules on your AI agent's tools, in code: for Symfony AI, MCP servers and any agent loop.
+</p>
+
+<p align="center">
+  <a href="https://github.com/acencyril/tool-guard-bundle/actions/workflows/tests.yml"><img src="https://github.com/acencyril/tool-guard-bundle/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
+  <a href="https://packagist.org/packages/acencyril/tool-guard-bundle"><img src="https://img.shields.io/packagist/v/acencyril/tool-guard-bundle?include_prereleases&label=packagist" alt="Packagist"></a>
+  <img src="https://img.shields.io/badge/PHP-8.2%2B-777bb4" alt="PHP 8.2+">
+  <img src="https://img.shields.io/badge/Symfony-7.3%20%7C%208-000000" alt="Symfony 7.3 | 8">
+  <img src="https://img.shields.io/badge/MCP-PHP%20SDK-10b981" alt="MCP PHP SDK">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+</p>
+
+<p align="center">
+  <a href="#try-it-in-one-command">Quick start</a> ·
+  <a href="https://www.youtube.com/watch?v=BkBSQzF26Os">Video</a> ·
+  <a href="#at-a-glance">At a glance</a> ·
+  <a href="docs/judges.md">Judge guide</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="docs/recommendations.md">AI Act, ANSSI, OWASP</a>
+</p>
 
 **Your AI agent can be talked into refunding 640 €. Tool Guard stops it, in code.**
 
-**A prompt is not a lock.** When an AI agent can refund, email or delete, the rules can't live
+When an AI agent can refund, email or delete, the rules can't live
 in its prompt: a persuasive user talks the model out of them. Tool Guard puts the rules in code,
 on the tools themselves. Whatever the model was talked into, a refused call never runs, and a
 risky one waits for a human.
