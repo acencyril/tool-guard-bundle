@@ -40,7 +40,8 @@ final class ShopTools
     public function refund(string $orderId, float $amount): string
     {
         $d = $this->shop->data();
-        $d['orders'][$orderId]['refunded'] += $amount;
+        // no check of its own, on purpose: without a guard this refunds any order, even one that does not exist
+        $d['orders'][$orderId]['refunded'] = ($d['orders'][$orderId]['refunded'] ?? 0.0) + $amount;
         $this->shop->save($d);
 
         return sprintf('Refunded %.2f € on %s', $amount, $orderId);

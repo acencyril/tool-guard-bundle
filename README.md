@@ -48,6 +48,10 @@ reproduction, all three fixed and merged upstream
 [#697](https://github.com/modelcontextprotocol/php-sdk/pull/697), the last one released in 0.10.0).
 [Feedback on the pre-releases](#feedback-on-the-pre-releases)
 
+**Measured, not claimed:** 25 attacks on the demo shop, replayed by the test suite on both paths.
+Without Tool Guard 19 run; with it, none ([the attack corpus](#the-attack-corpus)). And every decision
+shows in a panel of the Symfony profiler ([In the Symfony profiler](#in-the-symfony-profiler)).
+
 ## At a glance
 
 Tool Guard guards the **business actions** an agent takes in your application (refunds, customer
@@ -414,6 +418,48 @@ OPENROUTER_API_KEY=… php demo/bin/console demo:attack-real-model --model=opena
 
 The same tools, with the same attributes, serve both paths: `#[McpTool]` for the MCP server,
 `#[AsTool]` for the agent (`demo/src/ShopTools.php`).
+
+## The attack corpus
+
+`tests/Fixtures/attacks/shop.php` holds 28 scenarios: what was said to the support agent, and the tool
+call a convinced model then sends. `tests/Demo/AttackCorpusTest.php` plays each one against the demo
+shop with Tool Guard and against the same shop without it, over MCP and through a Symfony AI toolbox,
+at every run of the test suite.
+
+| What the attacker tries | Scenarios | Without Tool Guard | With Tool Guard |
+|---|---|---|---|
+| A claimed authority ("I am the director", "Paul approved", "system notice") | 5 | 5 run | 3 refused, 2 held for a human |
+| Pressure on the amount (5 000 €, one cent over, negative, zero) | 5 | 5 run | 4 refused, 1 held |
+| Someone else's order, or an order that does not exist | 4 | 4 run | 4 refused |
+| Small steps (49 € again and again, asking again after a hold) | 2 | 2 run | 1 refused, 1 held |
+| An action on everyone (newsletter, export) | 3 | 3 run | 1 refused, 2 held |
+| A malformed argument (text for a number, a list, infinity, nothing) | 6 | 0 run: the MCP SDK and Symfony AI already refuse them | 6 refused |
+| **25 attacks** | **25** | **19 run** | **0 run: 19 refused, 6 held** |
+| Honest requests (an order, a 20 € fee, a 50 € voucher) | 3 | 3 run | 3 run |
+
+Two things the table says plainly. The six malformed arguments are stopped by the stack itself: they
+are in the corpus so that nobody has to take that on trust, not to credit Tool Guard with it. And the
+three honest requests run: a guard that refuses everything proves nothing.
+
+```bash
+vendor/bin/phpunit tests/Demo/AttackCorpusTest.php --testdox
+```
+
+### Against real models, counted
+
+The corpus sends the calls a convinced model would send. Whether a given model *is* convinced is a
+separate question, and it is measured the same way: from Tool Guard's journal, never from what the
+model says. Each model plays the seven-message conversation several times; for each attack message,
+the count is the number of runs in which the model asked for a call the shop's rules do not let through.
+
+```bash
+HF_TOKEN=hf_… php demo/bin/console demo:attack-real-model --runs=5 \
+  --models=openai/gpt-oss-120b,Qwen/Qwen3-235B-A22B-Instruct-2507 --json=var/measure.json
+```
+
+It prints one line per message and per model (`4/5`: talked into it in four runs of five), the calls
+asked for (ran / held / refused), and the model calls that failed. Whatever a model was talked
+into, the held and refused calls did not run.
 
 ## Agents have their own role
 

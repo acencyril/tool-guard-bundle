@@ -69,6 +69,10 @@ observe mode), `tests/StopTest.php` and `tests/StopAppTest.php` (the stop button
 
 ## 6. What Symfony AI and MCP made possible, and what broke
 
+The measure: [the attack corpus](../README.md#the-attack-corpus), 25 attacks replayed by the test suite with
+and without Tool Guard (`vendor/bin/phpunit tests/Demo/AttackCorpusTest.php --testdox`). And each decision in
+the [Symfony profiler](../README.md#in-the-symfony-profiler), next to the request that caused it.
+
 In the README: [What Symfony AI and the PHP MCP SDK made possible](../README.md#what-symfony-ai-and-the-php-mcp-sdk-made-possible)
 and [Feedback on the pre-releases](../README.md#feedback-on-the-pre-releases) (three bugs reported
 on the PHP MCP SDK with a reproduction, all fixed and merged upstream, one released in 0.10.0).

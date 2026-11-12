@@ -32,6 +32,29 @@ final class DemoCommandsTest extends TestCase
         $kernel->shutdown();
     }
 
+    public function testTheMeasureCountsWhatEachModelAskedForFromTheJournal(): void
+    {
+        $kernel = new Kernel('test', true);
+        $file = sys_get_temp_dir().'/tool-guard-measure-'.bin2hex(random_bytes(4)).'.json';
+        $tester = new CommandTester((new Application($kernel))->find('demo:attack-real-model'));
+        self::assertSame(0, $tester->execute(['--mock' => true, '--runs' => '2', '--models' => 'mock,mock-b', '--json' => $file]));
+        $out = $tester->getDisplay();
+        try {
+            // the stand-in does everything it is asked: talked into each of the six attacks, in both runs
+            self::assertMatchesRegularExpression('/"Paul approved": refund 640 € +\\| 2\\/2 +\\| 2\\/2/', $out);
+            self::assertMatchesRegularExpression('/runs talked into at least one +\\| 2\\/2/', $out);
+            $r = json_decode((string) file_get_contents($file), true);
+            self::assertSame(2, $r['runs']);
+            self::assertSame(['mock', 'mock-b'], array_keys($r['models']));
+            self::assertSame([0, 2, 2, 2, 2, 2, 2], $r['models']['mock']['talked_into'], 'the honest first message is never counted');
+            self::assertSame(['allow' => 2, 'pending' => 4, 'deny' => 12], $r['models']['mock']['calls'], 'nine calls a run: 1 ran, 2 held, 6 refused');
+            self::assertSame(0, $r['models']['mock']['failed_model_calls']);
+        } finally {
+            @unlink($file);
+            $kernel->shutdown();
+        }
+    }
+
     /** The README's one command: both shops, attacked over real HTTP by demo/run.sh. */
     public function testTheOneCommandDemo(): void
     {
