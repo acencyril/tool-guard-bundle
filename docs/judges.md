@@ -70,5 +70,5 @@ observe mode), `tests/StopTest.php` and `tests/StopAppTest.php` (the stop button
 ## 6. What Symfony AI and MCP made possible, and what broke
 
 In the README: [What Symfony AI and the PHP MCP SDK made possible](../README.md#what-symfony-ai-and-the-php-mcp-sdk-made-possible)
-and [Feedback on the pre-releases](../README.md#feedback-on-the-pre-releases) (issues reported upstream
-with a reproduction).
+and [Feedback on the pre-releases](../README.md#feedback-on-the-pre-releases) (three bugs reported
+on the PHP MCP SDK with a reproduction, all fixed and merged upstream, one released in 0.10.0).

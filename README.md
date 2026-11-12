@@ -41,6 +41,13 @@ Reviewing it? The [judge guide](docs/judges.md) runs it in 2 minutes and points 
 
 ▶ **The 90-second video:** [youtube.com/watch?v=BkBSQzF26Os](https://www.youtube.com/watch?v=BkBSQzF26Os) — the scripted attack, then a real model talked into a 640 € refund that Tool Guard holds for a human, while the approver's phone gets the request.
 
+**It gave back to the pre-releases it is built on:** three bugs reported on the official PHP MCP SDK with a
+reproduction, all three fixed and merged upstream
+([#642](https://github.com/modelcontextprotocol/php-sdk/pull/642),
+[#643](https://github.com/modelcontextprotocol/php-sdk/pull/643),
+[#697](https://github.com/modelcontextprotocol/php-sdk/pull/697), the last one released in 0.10.0).
+[Feedback on the pre-releases](#feedback-on-the-pre-releases)
+
 ## At a glance
 
 Tool Guard guards the **business actions** an agent takes in your application (refunds, customer
@@ -64,7 +71,7 @@ often, with a human above a threshold.
 - **Seen before it is enforced.** Observe mode logs what would have been refused; `debug:tool-guard`
   lists every tool and the ones without rules; the profiler panel shows each decision.
 - **Tried against the real stack.** Built on Symfony AI and the PHP MCP SDK pre-releases, with a real
-  model; what broke was reported upstream with a reproduction and fixed there.
+  model; the three bugs it met in the PHP MCP SDK were reported upstream with a reproduction and are fixed there.
   [Feedback on the pre-releases](#feedback-on-the-pre-releases)
 
 What it does not do is written down too: no prompt-injection detection, no filtering of what the
@@ -559,6 +566,14 @@ with a real model on Hugging Face Inference Providers. What broke, reported upst
   Tool Guard checks the raw arguments, so a difference between what it sees and what the tool receives matters.
   Both are fixed upstream: #640 in [#642](https://github.com/modelcontextprotocol/php-sdk/pull/642) and #641 in
   [#643](https://github.com/modelcontextprotocol/php-sdk/pull/643), merged on 3 November 2026.
+- An integer argument beyond the integer range changed value instead of being refused (a number too
+  large, an oversized numeric string, `--5`). Reported privately with a reproduction; the maintainers classified it as a bug
+  and fixed it in [#697](https://github.com/modelcontextprotocol/php-sdk/pull/697), merged on
+  8 November 2026 and released in mcp/sdk 0.10.0: these arguments are now refused. Checked against the
+  0.10.0 code on 11 November 2026.
+
+Tool Guard itself runs on mcp/sdk 0.9 for now: symfony/mcp-bundle still requires `^0.9`, and 0.10
+renames part of the SDK. It moves to 0.10 as soon as the bundle allows it.
 
 One more thing the demo works around, not reported by me: Hugging Face refuses a tool sent without
 `parameters`. Symfony AI already fixed it after BETA1 ([symfony/ai#2848](https://github.com/symfony/ai/pull/2848));
