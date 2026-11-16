@@ -42,7 +42,7 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 
 | What | Where |
 |---|---|
-| The attributes | `src/Attribute/` (`Granted`, `Limit`, `RateLimit`, `RequiresApproval`) |
+| The attributes | `src/Attribute/` (`Granted`, `Limit`, `AllowedValues`, `RateLimit`, `RequiresApproval`) |
 | The decision, for any call | `src/Guard.php` |
 | Symfony AI agent tools | `src/Integration/Agent/GuardToolCalls.php` (listens to `ToolCallRequested`, answers instead of the tool) |
 | MCP tools | `src/Integration/Mcp/GuardedReferenceHandler.php` (decorates the PHP MCP SDK's `ReferenceHandlerInterface`) |
@@ -51,6 +51,8 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 | The hash-chained journal | `src/Journal/JsonlJournal.php` |
 | Testing agent permissions in CI | `src/Test/ToolGuardAssertions.php` |
 | The stop button | `src/Stop/`, `tool-guard:stop` / `tool-guard:resume` (`src/Command/`), checked first in `src/Guard.php` |
+| In front of an MCP server you did not write (rules from a config, tool fingerprints, poisoned descriptions refused) | `src/Gateway/McpGateway.php`, `src/Gateway/Pins.php`, `tool-guard:gateway` (`src/Command/GatewayCommand.php`) |
+| The same rules in Python and Node | [acencyril/tool-guard-python](https://github.com/acencyril/tool-guard-python), [acencyril/tool-guard-node](https://github.com/acencyril/tool-guard-node) (same message to the model, same gateway config and fingerprints) |
 | What the AI Act, the ANSSI and OWASP recommend, and what Tool Guard covers | [docs/recommendations.md](recommendations.md) |
 
 ## 5. Tests
@@ -59,12 +61,12 @@ refund for a human. Three 49 € refunds instead: the third is refused.
 vendor/bin/phpunit
 ```
 
-61 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
+127 tests, run on PHP 8.2, 8.3 and 8.4 in CI. Worth a look:
 `tests/Demo/DemoRulesTest.php` (the nine attacks, and the tricks a reviewer tries: the amount left
 out, text for a number, a negative refund, infinity, someone else's order) and
 `tests/IntegrationTest.php` (a Symfony AI toolbox and an MCP server never run a refused or held call),
 `tests/GuardTest.php` (two approvers at once run a refund once; an old request expires; four eyes;
-observe mode), `tests/StopTest.php` and `tests/StopAppTest.php` (the stop button: nothing runs while stopped, on any path; held calls wait; the back office keeps working while the agent is stopped; eight processes stopping at once lose nothing), `tests/AgentRolesTest.php` (an agent never gets every right of its user: the user and the agent must both be allowed), `tests/IntegrationTest.php` (a workflow chaining tool calls is guarded at every step; `GuardedInvoker` for any other execution layer). `php demo/bin/console debug:tool-guard` lists every tool and its rules;
+observe mode), `tests/StopTest.php` and `tests/StopAppTest.php` (the stop button: nothing runs while stopped, on any path; held calls wait; the back office keeps working while the agent is stopped; eight processes stopping at once lose nothing), `tests/AgentRolesTest.php` (an agent never gets every right of its user: the user and the agent must both be allowed), `tests/IntegrationTest.php` (a workflow chaining tool calls is guarded at every step; `GuardedInvoker` for any other execution layer), `tests/GatewayTest.php` (a real MCP server behind the gateway: nothing blocked reaches it, an approved payment runs once, a tool that changes or whose description gives orders cannot be called until trusted; the fingerprint is the same in PHP, Python and Node). `php demo/bin/console debug:tool-guard` lists every tool and its rules;
 `DEMO_PROFILER=1` adds the Tool Guard panel of the Symfony profiler to the demo.
 
 ## 6. What Symfony AI and MCP made possible, and what broke
