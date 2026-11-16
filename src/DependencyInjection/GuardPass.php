@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Acencyril\ToolGuardBundle\DependencyInjection;
 
 use Acencyril\ToolGuardBundle\Approval\Approver;
+use Acencyril\ToolGuardBundle\Attribute\AllowedValues;
 use Acencyril\ToolGuardBundle\Attribute\Granted;
 use Acencyril\ToolGuardBundle\Attribute\Limit;
 use Acencyril\ToolGuardBundle\Attribute\RateLimit;
@@ -27,7 +28,7 @@ use Symfony\Component\DependencyInjection\Reference;
  */
 final class GuardPass implements CompilerPassInterface
 {
-    private const ATTRIBUTES = [Granted::class, Limit::class, RateLimit::class, RequiresApproval::class];
+    private const ATTRIBUTES = [Granted::class, Limit::class, AllowedValues::class, RateLimit::class, RequiresApproval::class];
     public const AS_TOOL = 'Symfony\\AI\\Agent\\Toolbox\\Attribute\\AsTool';
     public const MCP_TOOL = 'Mcp\\Capability\\Attribute\\McpTool';
 
@@ -161,6 +162,9 @@ final class GuardPass implements CompilerPassInterface
         $params = array_map(static fn (\ReflectionParameter $p) => $p->getName(), $m->getParameters());
         $named = [];
         foreach ($m->getAttributes(Limit::class) as $a) {
+            $named[] = $a->newInstance()->argument;
+        }
+        foreach ($m->getAttributes(AllowedValues::class) as $a) {
             $named[] = $a->newInstance()->argument;
         }
         foreach ($m->getAttributes(Granted::class) as $a) {

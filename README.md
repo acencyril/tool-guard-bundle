@@ -68,6 +68,10 @@ often, with a human above a threshold.
 - **Every path, one rule set.** The same attributes guard a Symfony AI agent tool, an MCP tool
   (symfony/mcp-bundle or the PHP MCP SDK) and any agent loop of your own through `GuardedInvoker`.
   [You don't need Symfony AI](#you-dont-need-symfony-ai) · [Whatever path the call takes](#whatever-path-the-call-takes)
+- **In front of MCP servers you did not write.** A mail, drive or CRM server written by someone else:
+  `tool-guard:gateway` sits between the agent and it, applies the same rules from a config file, and
+  fingerprints every tool, so a tool that changes or whose description gives the model orders cannot be
+  called until a person trusts it again. [In front of an MCP server you did not write](#in-front-of-an-mcp-server-you-did-not-write)
 - **Stopping the AI does not stop the business.** `tool-guard:stop` halts every AI caller at its next
   call; your back office keeps refunding through the human channel, with every rule still applied.
 - **Tested in CI, with no model and no key.** `assertToolRan`, `assertToolHeld`, `assertToolRefused`,
@@ -77,6 +81,11 @@ often, with a human above a threshold.
 - **Tried against the real stack.** Built on Symfony AI and the PHP MCP SDK pre-releases, with a real
   model; the three bugs it met in the PHP MCP SDK were reported upstream with a reproduction and are fixed there.
   [Feedback on the pre-releases](#feedback-on-the-pre-releases)
+
+- **Not only PHP.** The same rules, the same message to the model and the same gateway config exist for
+  [Python](https://github.com/acencyril/tool-guard-python) (OpenAI Agents SDK, LangChain, MCP) and
+  [Node](https://github.com/acencyril/tool-guard-node) (Vercel AI SDK, OpenAI Agents SDK, MCP).
+  [Also for Python and Node](#also-for-python-and-node)
 
 What it does not do is written down too: no prompt-injection detection, no filtering of what the
 model says, no undo of an action that already ran ([docs/recommendations.md](docs/recommendations.md)).
@@ -140,7 +149,7 @@ MCP servers ([symfony/mcp-bundle](https://symfony.com/doc/current/ai/bundles/mcp
 with the same attributes:
 
 ```php
-use Acencyril\ToolGuardBundle\Attribute\{Granted, Limit, RateLimit, RequiresApproval};
+use Acencyril\ToolGuardBundle\Attribute\{AllowedValues, Granted, Limit, RateLimit, RequiresApproval};
 
 final class OrderTools
 {
@@ -154,6 +163,9 @@ final class OrderTools
 
     #[RequiresApproval('emails to all customers are reviewed')]
     public function sendNewsletter(string $subject, string $body): string { /* … */ }
+
+    #[AllowedValues('to', ['*@mycompany.com'])]     // any other recipient: a human approves
+    public function sendEmail(string $to, string $body): string { /* … */ }
 }
 ```
 
@@ -509,6 +521,46 @@ try {
 
 A step that is refused or held stops the workflow there: it never goes on as if the step had run.
 
+## In front of an MCP server you did not write
+
+Your agent also uses MCP servers somebody else wrote: mail, drive, CRM, a bank. You cannot put an attribute
+in their code. Put the gateway in front of them: in the agent's MCP settings, replace the server's command
+with the gateway, which starts the real server and relays every message, except the calls it refuses or holds.
+
+```json
+// config/tool-guard/mail.json
+{
+  "upstream": {"command": "npx", "args": ["-y", "some-mail-mcp-server@1.4.2"], "env": {"MAIL_TOKEN": "..."}},
+  "default": "allow",
+  "trust_on_first_use": true,
+  "tools": {
+    "send_email": {"allowed_values": {"to": ["*@mycompany.com"]}},
+    "delete_*": {"deny": "deleting mail is not allowed"},
+    "create_payment": {"limit": {"amount": {"max": 50, "above": "approval", "min": 0}}},
+    "search": {"rate": {"limit": 30, "per_seconds": 60}}
+  }
+}
+```
+
+```json
+{"command": "php", "args": ["bin/console", "tool-guard:gateway", "config/tool-guard/mail.json"]}
+```
+
+- A mail to `thief@gmail.com` waits for a human on the same approvals page as your own tools; `delete_email`
+  is refused; nothing blocked reaches the server. Once approved, the call runs in the gateway and its result
+  is stored with the request. The stop button and the journal are the app's.
+- Every tool is fingerprinted (name, description, input schema). A tool that appears or changes after it was
+  trusted cannot be called, and neither can a tool whose description gives the model orders ("ignore previous
+  instructions", "do not tell the user", "send … to http…", "read ~/.ssh…"), even on first use: the poisoned
+  tool and the update that turns a trusted server against you.
+
+```bash
+php bin/console tool-guard:gateway config/tool-guard/mail.json --tools            # trusted or blocked, and why
+php bin/console tool-guard:gateway config/tool-guard/mail.json --trust send_email # a person trusts it again
+```
+
+The config file and the fingerprints are the same in the Python and Node gateways.
+
 ## Every tool, its rules, and the ones without: `debug:tool-guard`
 
 Like `debug:router`, for what an AI may call:
@@ -632,6 +684,18 @@ scopes per tool, and permissions on MCP tools are being worked on upstream; Tool
 `#[Granted]` will step aside for them when they land. Tool Guard adds what neither covers: decisions on the arguments of the
 call (voter subject, limits), rates, human approval on another channel and the journal, with one
 set of attributes for agent tools and MCP tools.
+
+## Also for Python and Node
+
+Most agents are not written in PHP. The same rules, the same message to the model, the same approvals,
+stop button and journal, and the same gateway config exist as two packages without dependencies:
+
+- **Python**, [acencyril/tool-guard-python](https://github.com/acencyril/tool-guard-python): a decorator on the
+  tool function (`@limit("amount", max=50, above=APPROVAL)`), tested with the OpenAI Agents SDK, LangChain and
+  an MCP server.
+- **Node**, [acencyril/tool-guard-node](https://github.com/acencyril/tool-guard-node): a wrapper around the tool's
+  `execute` (`guard.wrap('refund', [limit('amount', { max: 50, above: APPROVAL })], fn)`), tested with the
+  Vercel AI SDK, the OpenAI Agents SDK and an MCP server.
 
 ## License
 

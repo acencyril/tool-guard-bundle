@@ -6,6 +6,7 @@ namespace Acencyril\ToolGuardBundle;
 
 use Acencyril\ToolGuardBundle\Approval\Approval;
 use Acencyril\ToolGuardBundle\Approval\ApprovalStore;
+use Acencyril\ToolGuardBundle\Attribute\AllowedValues;
 use Acencyril\ToolGuardBundle\Attribute\Granted;
 use Acencyril\ToolGuardBundle\Attribute\Limit;
 use Acencyril\ToolGuardBundle\Attribute\RateLimit;
@@ -74,10 +75,14 @@ final class Guard
         }
     }
 
-    public function decide(Invocation $call): Decision
+    /**
+     * @param array{granted?: list<Granted>, limits?: list<Limit>, values?: list<AllowedValues>, rate?: ?RateLimit, approval?: ?RequiresApproval}|null $rules
+     *        rules given directly instead of read from the method's attributes (the MCP gateway's config)
+     */
+    public function decide(Invocation $call, ?array $rules = null): Decision
     {
         $stopped = $this->stopped($call);
-        $decision = $stopped ?? $this->evaluate($call);
+        $decision = $stopped ?? $this->evaluate($call, null === $rules ? null : $rules + ['granted' => [], 'limits' => [], 'values' => [], 'rate' => null, 'approval' => null]);
         $would = null;
         if (null === $stopped && self::OBSERVE === $this->mode && !$decision->allowed()) {
             [$would, $decision] = [$decision, Decision::allow()];
@@ -124,6 +129,9 @@ final class Guard
         foreach ($r['limits'] as $l) {
             $out[] = sprintf('#[Limit] %s%s ≤ %s, above: %s', null === $l->min ? '' : self::scalar($l->min).' ≤ ', $l->argument, self::scalar($l->max), Limit::DENY === $l->above ? 'refused' : 'held for a human');
         }
+        foreach ($r['values'] as $av) {
+            $out[] = sprintf('#[AllowedValues] %s in %s, otherwise: %s', $av->argument, implode(', ', $av->patterns), AllowedValues::DENY === $av->otherwise ? 'refused' : 'held for a human');
+        }
         if (null !== $r['approval']) {
             $out[] = '#[RequiresApproval]'.(null === $r['approval']->reason ? '' : ' '.$r['approval']->reason);
         }
@@ -143,7 +151,7 @@ final class Guard
         }
         $r = $this->rules($class, $method);
 
-        return [] !== $r['granted'] || [] !== $r['limits'] || null !== $r['rate'] || null !== $r['approval'];
+        return [] !== $r['granted'] || [] !== $r['limits'] || [] !== $r['values'] || null !== $r['rate'] || null !== $r['approval'];
     }
 
     /**
@@ -178,9 +186,9 @@ final class Guard
         return [] !== $stops && (null === $tool || null !== Stop::matching($stops, $tool, $agent));
     }
 
-    private function evaluate(Invocation $call): Decision
+    private function evaluate(Invocation $call, ?array $given = null): Decision
     {
-        $r = $this->rules($call->class, $call->method);
+        $r = $given ?? $this->rules($call->class, $call->method);
 
         foreach ($r['granted'] as $g) {
             if (null === $this->auth) {
@@ -219,6 +227,16 @@ final class Guard
             if ((float) $v > $l->max) {
                 $why = sprintf('%s %s is above the limit of %s', $l->argument, self::scalar($v), self::scalar($l->max));
                 if (Limit::DENY === $l->above) {
+                    return Decision::deny($why);
+                }
+                $hold ??= $why;
+            }
+        }
+        foreach ($r['values'] as $av) {
+            $v = $call->arguments[$av->argument] ?? null;
+            if (!$av->allows($v)) {
+                $why = sprintf('%s "%s" is not among the allowed values', $av->argument, $av->offending($v));
+                if (AllowedValues::DENY === $av->otherwise) {
                     return Decision::deny($why);
                 }
                 $hold ??= $why;
@@ -308,7 +326,7 @@ final class Guard
         if (isset($this->rules[$key])) {
             return $this->rules[$key];
         }
-        $empty = ['granted' => [], 'limits' => [], 'rate' => null, 'approval' => null];
+        $empty = ['granted' => [], 'limits' => [], 'values' => [], 'rate' => null, 'approval' => null];
         if (!method_exists($class, $method)) {
             return $this->rules[$key] = $empty;
         }
@@ -324,6 +342,7 @@ final class Guard
         return $this->rules[$key] = [
             'granted' => $all(Granted::class),
             'limits' => array_map(static fn ($x) => $x->newInstance(), $m->getAttributes(Limit::class)),
+            'values' => array_map(static fn ($x) => $x->newInstance(), $m->getAttributes(AllowedValues::class)),
             'rate' => $one(RateLimit::class),
             'approval' => $one(RequiresApproval::class),
         ];

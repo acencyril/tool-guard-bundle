@@ -33,6 +33,7 @@ final class Approval
         public ?\DateTimeImmutable $decidedAt = null,
         public ?string $result = null,
         public readonly ?string $agent = null,
+        public bool $queued = false,
     ) {
     }
 
@@ -65,6 +66,7 @@ final class Approval
             'arguments' => $this->arguments, 'requested_by' => $this->requestedBy, 'reason' => $this->reason,
             'requested_at' => $this->requestedAt->format(\DATE_ATOM), 'status' => $this->status, 'decided_by' => $this->decidedBy,
             'decided_at' => $this->decidedAt?->format(\DATE_ATOM), 'result' => $this->result, 'agent' => $this->agent,
+            'queued' => $this->queued,
         ];
     }
 
@@ -76,6 +78,7 @@ final class Approval
             (array) $d['arguments'], $d['requested_by'] ?? null, (string) $d['reason'], new \DateTimeImmutable((string) $d['requested_at']),
             (string) $d['status'], $d['decided_by'] ?? null, isset($d['decided_at']) ? new \DateTimeImmutable((string) $d['decided_at']) : null, $d['result'] ?? null,
             $d['agent'] ?? null,
+            (bool) ($d['queued'] ?? false),
         );
     }
 }

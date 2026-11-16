@@ -6,6 +6,7 @@ namespace Acencyril\ToolGuardBundle\Approval;
 
 use Acencyril\ToolGuardBundle\Call;
 use Acencyril\ToolGuardBundle\Event\ApprovalDecided;
+use Acencyril\ToolGuardBundle\Gateway\McpGateway;
 use Acencyril\ToolGuardBundle\Invocation;
 use Acencyril\ToolGuardBundle\Journal\Journal;
 use Acencyril\ToolGuardBundle\Stop\Stop;
@@ -45,6 +46,14 @@ final class Approver
         }
         $this->notStopped($a);
         $this->claim($a);
+        if (McpGateway::CLASS_MARKER === $a->class) {
+            // a call to an MCP server behind the gateway: it runs in the gateway process, which picks it up
+            $a->status = Approval::APPROVED;
+            $a->queued = true;
+            $a->result = "approved, runs at the gateway's next check";
+
+            return $this->close($a, $by);
+        }
         try {
             $result = $this->run($a);
             $a->status = Approval::APPROVED;

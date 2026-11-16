@@ -9,6 +9,7 @@ use Acencyril\ToolGuardBundle\Approval\Approver;
 use Acencyril\ToolGuardBundle\Approval\FilesystemApprovalStore;
 use Acencyril\ToolGuardBundle\Command\ApprovalsCommand;
 use Acencyril\ToolGuardBundle\Command\ResumeCommand;
+use Acencyril\ToolGuardBundle\Command\GatewayCommand;
 use Acencyril\ToolGuardBundle\Command\RulesCommand;
 use Acencyril\ToolGuardBundle\Command\StopCommand;
 use Acencyril\ToolGuardBundle\Controller\ApprovalsController;
@@ -133,6 +134,7 @@ final class ToolGuardBundle extends AbstractBundle
         }
         $s->set(RulesCommand::class)->args([service(Guard::class), '%tool_guard.tool_classes%', service(StopStore::class)])->tag('console.command');
         $s->set(StopCommand::class)->args([service(StopButton::class)])->tag('console.command');
+        $s->set(GatewayCommand::class)->args([service(Guard::class), service(ApprovalStore::class), service(Journal::class), '%kernel.project_dir%'])->tag('console.command');
         $s->set(ResumeCommand::class)->args([service(StopButton::class)])->tag('console.command');
         if ($config['ntfy']['enabled']) {
             $s->set(NtfyNotifier::class)
