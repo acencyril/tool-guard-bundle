@@ -5,7 +5,7 @@
 #   docker run --rm --user "$(id -u):$(id -g)" -e COMPOSER_HOME=/tmp/composer -v "$PWD":/app -w /app composer:2 sh demo/run.sh
 set -e
 cd "$(dirname "$0")/.."
-[ -d vendor ] || composer install --no-interaction --no-progress --quiet
+[ -d vendor ] || composer install --no-interaction --no-progress --quiet --ignore-platform-req=ext-xsl
 
 serve() { # port, extra env
     env $2 php -S "127.0.0.1:$1" -t demo/public >/dev/null 2>&1 &
