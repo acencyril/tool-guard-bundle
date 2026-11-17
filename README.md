@@ -140,6 +140,10 @@ guard the tools whichever way your agent reaches them:
   a workflow, a Messenger handler, code an agent wrote. Call the tool through `GuardedInvoker`
   ([Whatever path the call takes](#whatever-path-the-call-takes)).
 
+Install it with `composer require acencyril/tool-guard-bundle`: the Symfony Flex recipe
+([symfony/recipes-contrib](https://github.com/symfony/recipes-contrib/tree/main/acencyril/tool-guard-bundle))
+registers the bundle and adds `config/packages/tool_guard.yaml` and `config/routes/tool_guard.yaml`
+(the approvals page, `/admin/ai/approvals`, to keep behind your firewall).
 Symfony AI and the MCP bundle are only suggested in `composer.json`; install the ones you use.
 
 ## How it works
