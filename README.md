@@ -25,7 +25,8 @@
   <a href="#at-a-glance">At a glance</a> ·
   <a href="docs/judges.md">Judge guide</a> ·
   <a href="#configuration">Configuration</a> ·
-  <a href="docs/recommendations.md">AI Act, ANSSI, OWASP</a>
+  <a href="docs/recommendations.md">AI Act, ANSSI, OWASP</a> ·
+  <a href="docs/attack-playbook.md">From a manipulation to a rule</a>
 </p>
 
 **Your AI agent can be talked into refunding 640 €. Tool Guard stops it, in code.**

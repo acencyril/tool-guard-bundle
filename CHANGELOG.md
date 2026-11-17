@@ -2,6 +2,10 @@
 
 Versions are git tags (`v0.1.0`, `v0.2.0`), published on Packagist.
 
+## Unreleased
+
+- Docs: [From a manipulation to a rule](docs/attack-playbook.md), the common ways agents are talked into acting and the attribute that holds each act; install through the Symfony Flex recipe (recipes-contrib).
+
 ## 0.3.0 — 2026-11-08
 
 - **Stop button.** `tool-guard:stop` / `tool-guard:resume`, and on the approvals page "Stop the agents"
